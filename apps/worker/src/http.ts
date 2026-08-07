@@ -8,6 +8,7 @@ import { createLogger } from "@course-prod/core/logger";
 import { enqueueStage } from "@course-prod/core/queue";
 import { STAGES, type Stage } from "@course-prod/core/stages";
 import { lessonKey } from "@course-prod/core/storage";
+import { listVoices } from "@course-prod/core/providers/voices";
 import { objectStore } from "./context.js";
 import { isAccepted, MAX_UPLOAD_BYTES } from "./extract.js";
 import { answerDeckQuestion } from "./stages/deck.js";
@@ -79,6 +80,8 @@ export async function handleRequest(
     if (url.pathname === "/enqueue" && req.method === "POST") return await enqueue(req, res);
     if (url.pathname === "/dokie/reply" && req.method === "POST") return await dokieReply(req, res);
     if (url.pathname === "/self-test") return json(res, 200, await runSelfTest());
+    if (url.pathname === "/voices" && req.method === "GET") return await voices(res);
+    if (url.pathname === "/providers" && req.method === "GET") return providers(res);
   } catch (e) {
     const status = (e as { statusCode?: number }).statusCode ?? 500;
     log.error("request failed", { path: url.pathname, error: e });
@@ -160,6 +163,35 @@ async function enqueue(req: IncomingMessage, res: ServerResponse): Promise<void>
   });
 
   return json(res, 202, { jobId: id ?? null, correlationId: randomUUID() });
+}
+
+/**
+ * Voice list for the settings picker. Lives on the worker because that is
+ * where ELEVENLABS_API_KEY is (§10 keeps provider keys off the web service).
+ */
+async function voices(res: ServerResponse): Promise<void> {
+  try {
+    return json(res, 200, { voices: await listVoices() });
+  } catch (e) {
+    return json(res, 200, { voices: [], error: (e as Error).message });
+  }
+}
+
+/**
+ * Which provider keys are present — names and booleans only, never values.
+ * Lets the settings page tell a producer "ElevenLabs is not configured"
+ * instead of leaving them to guess why the voice list is empty.
+ */
+function providers(res: ServerResponse): void {
+  return json(res, 200, {
+    openai: Boolean(process.env.OPENAI_API_KEY),
+    anthropic: Boolean(process.env.ANTHROPIC_API_KEY),
+    elevenlabs: Boolean(process.env.ELEVENLABS_API_KEY),
+    elevenlabsVoice: Boolean(process.env.ELEVENLABS_VOICE_ID),
+    dokie: Boolean(process.env.DOKIE_API_KEY),
+    dokieLogin: Boolean(process.env.DOKIE_EMAIL && process.env.DOKIE_PASSWORD),
+    telegram: Boolean(process.env.TELEGRAM_BOT_TOKEN && process.env.TELEGRAM_CHAT_ID),
+  });
 }
 
 async function dokieReply(req: IncomingMessage, res: ServerResponse): Promise<void> {

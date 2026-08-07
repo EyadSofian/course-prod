@@ -91,3 +91,33 @@ export async function workerHealth(): Promise<unknown> {
   const res = await fetch(`${baseUrl}/health`, { signal: AbortSignal.timeout(10_000) });
   return res.json();
 }
+
+export interface Voice {
+  id: string;
+  name: string;
+  description: string;
+  previewUrl: string | null;
+  supportsArabic: boolean;
+}
+
+/** Voice list for the settings picker — the key lives on the worker (§10). */
+export async function listVoices(): Promise<{ voices: Voice[]; error?: string }> {
+  try {
+    const res = await request("/voices", { timeoutMs: 30_000 });
+    return res.json() as Promise<{ voices: Voice[]; error?: string }>;
+  } catch (e) {
+    return { voices: [], error: e instanceof WorkerError ? e.message : "تعذّر الاتصال بخدمة المعالجة." };
+  }
+}
+
+export type ProviderStatus = Record<string, boolean>;
+
+/** Which provider keys are set. Booleans only — never the values. */
+export async function providerStatus(): Promise<ProviderStatus> {
+  try {
+    const res = await request("/providers", { timeoutMs: 15_000 });
+    return res.json() as Promise<ProviderStatus>;
+  } catch {
+    return {};
+  }
+}

@@ -73,6 +73,10 @@
     "./settings-store": {
       "types": "./dist/settings-store.d.ts",
       "default": "./dist/settings-store.js"
+    },
+    "./providers/voices": {
+      "types": "./dist/providers/voices.d.ts",
+      "default": "./dist/providers/voices.js"
     }
   },
   "files": [

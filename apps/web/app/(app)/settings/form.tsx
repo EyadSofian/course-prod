@@ -3,7 +3,10 @@
 import { useActionState, useState } from "react";
 import { useFormStatus } from "react-dom";
 import type { Settings } from "@course-prod/core/settings";
+import type { ProviderStatus, Voice } from "@/lib/worker";
 import { updateSettings, type ActionState } from "../actions";
+import { VoicePicker } from "./voice-picker";
+import { ProviderKeys } from "./provider-keys";
 
 function Submit({ disabled }: { disabled: boolean }) {
   const { pending } = useFormStatus();
@@ -18,10 +21,16 @@ export function SettingsForm({
   settings,
   baseTemplate,
   readOnly,
+  voices,
+  voicesError,
+  providers,
 }: {
   settings: Settings;
   baseTemplate: string;
   readOnly: boolean;
+  voices: Voice[];
+  voicesError?: string;
+  providers: ProviderStatus;
 }) {
   const [state, formAction] = useActionState<ActionState, FormData>(updateSettings, {});
   const [prompt, setPrompt] = useState(settings.summarizePromptOverride);
@@ -148,11 +157,7 @@ export function SettingsForm({
               </select>
             </div>
 
-            <div className="field">
-              <label htmlFor="voiceId">معرّف الصوت</label>
-              <input id="voiceId" name="voiceId" defaultValue={settings.voiceId} dir="ltr" />
-              <span className="muted">يُطبَّق على الدروس الجديدة. الدروس المولَّدة لا تتغيّر.</span>
-            </div>
+            <VoicePicker voices={voices} current={settings.voiceId} error={voicesError} />
           </section>
 
           <section className="card">
@@ -184,6 +189,10 @@ export function SettingsForm({
               />
             </div>
           </section>
+        </div>
+
+        <div style={{ marginBlockStart: 16 }}>
+          <ProviderKeys providers={providers} />
         </div>
 
         <section className="card" style={{ marginBlockStart: 16 }}>

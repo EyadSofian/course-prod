@@ -3,13 +3,19 @@ import { loadSettings } from "@course-prod/core/settings-store";
 import { monthlySpend } from "@course-prod/core/costs";
 import { formatUsd } from "@course-prod/core/settings";
 import { requireSession } from "@/lib/session";
+import { listVoices, providerStatus } from "@/lib/worker";
 import { SettingsForm } from "./form";
 
 export const dynamic = "force-dynamic";
 
 export default async function SettingsPage() {
   const session = await requireSession();
-  const [settings, spend] = await Promise.all([loadSettings(), monthlySpend()]);
+  const [settings, spend, voiceList, providers] = await Promise.all([
+    loadSettings(),
+    monthlySpend(),
+    listVoices(),
+    providerStatus(),
+  ]);
 
   // Shown so an admin editing the override can see what they are overriding.
   let baseTemplate = "";
@@ -45,6 +51,9 @@ export default async function SettingsPage() {
         settings={settings}
         baseTemplate={baseTemplate}
         readOnly={session.role !== "admin"}
+        voices={voiceList.voices}
+        voicesError={voiceList.error}
+        providers={providers}
       />
     </>
   );
