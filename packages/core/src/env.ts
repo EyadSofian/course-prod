@@ -50,13 +50,29 @@ const workerSchema = z.object({
 export type WebEnv = z.infer<typeof webSchema>;
 export type WorkerEnv = z.infer<typeof workerSchema>;
 
+/** Variables that must be generated rather than invented. */
+const GENERATED_SECRETS = new Set(["SERVICE_KEY", "SESSION_SECRET"]);
+
 function parse<T extends z.ZodTypeAny>(schema: T, label: string): z.infer<T> {
   const result = schema.safeParse(process.env);
   if (!result.success) {
-    // Print the failing keys only. Never print values — a malformed secret is
-    // still a secret.
+    // Failing keys and messages only — never values. A malformed secret is
+    // still a secret, and this text goes straight into the deploy log.
     const keys = result.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`);
-    throw new Error(`Invalid ${label} environment:\n  ${keys.join("\n  ")}`);
+
+    // A bare "must be at least 32 chars" leaves the reader to guess how to
+    // produce one, and the usual guess is to type something longer by hand.
+    const needsSecret = result.error.issues.some((i) =>
+      GENERATED_SECRETS.has(String(i.path[0])),
+    );
+    const hint = needsSecret
+      ? "\n\nGenerate each one separately (44 chars, well over the minimum):\n" +
+        "  openssl rand -base64 32\n" +
+        "SERVICE_KEY and SESSION_SECRET must differ from each other, and each " +
+        "must be identical on the web and worker services."
+      : "";
+
+    throw new Error(`Invalid ${label} environment:\n  ${keys.join("\n  ")}${hint}`);
   }
   return result.data;
 }
