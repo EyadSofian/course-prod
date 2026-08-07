@@ -157,9 +157,14 @@ function classifyStatus(text: string): DeckStatus {
 
 export async function createPpt(
   session: DokieSession,
+  topic: string,
   brief: string,
 ): Promise<StatusResult> {
-  const raw = await callTool(session, DOKIE_TOOLS.create, { prompt: brief, content: brief });
+  // create_ppt rejects a call missing `topic` outright (schema-validated
+  // before the tool runs, so this costs nothing) — `prompt`/`content` alone
+  // are not enough. Dokie's schema is otherwise undocumented; this is the
+  // one required field the server has actually told us about.
+  const raw = await callTool(session, DOKIE_TOOLS.create, { topic, prompt: brief, content: brief });
   const status = classifyStatus(raw);
   return {
     status: status === "pending" ? "pending" : status,

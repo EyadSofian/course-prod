@@ -47,7 +47,7 @@ export async function handleDeck(ctx: StageContext): Promise<StageOutcome> {
     // bill twice.
     let state = lesson.dokieProjectId
       ? await getStatus(session, lesson.dokieProjectId)
-      : await createPpt(session, buildDeckBrief(lessonJson));
+      : await createPpt(session, lessonJson.title_ar, buildDeckBrief(lessonJson));
 
     ctx.record({
       slides: lessonJson.slides.length,
