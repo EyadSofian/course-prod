@@ -1,0 +1,350 @@
+/*
+ * Brand tokens (§8). RTL throughout: logical properties only — no margin-left,
+ * no padding-right, no left/right. Density and status legibility beat
+ * decoration; there are no gradients and no hero spacing in this file.
+ */
+
+:root {
+  --bg: #f7fafb;
+  --surface: #ffffff;
+  --teal: #0b7a8c;
+  --teal-hover: #096375;
+  --teal-soft: #e6f2f4;
+  --navy: #0d2137;
+  --text: #0d2137;
+  --muted: #5b6b78;
+  --border: #dde5e9;
+
+  /* Status colours. Never the only signal — every status also carries a label. */
+  --status-neutral: #5b6b78;
+  --status-running: #0b7a8c;
+  --status-review: #b45309;
+  --status-ready: #0f766e;
+  --status-done: #64748b;
+  --status-failed: #b91c1c;
+  --status-blocked: #a16207;
+
+  --radius: 12px;
+  --radius-sm: 8px;
+  --shadow: 0 1px 2px rgba(13, 33, 55, 0.06), 0 1px 3px rgba(13, 33, 55, 0.04);
+
+  --font-display: "Cairo", system-ui, sans-serif;
+  --font-body: "IBM Plex Sans Arabic", system-ui, sans-serif;
+
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-body);
+  font-size: 15px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1,
+h2,
+h3 {
+  font-family: var(--font-display);
+  font-weight: 700;
+  color: var(--navy);
+  margin: 0;
+  line-height: 1.35;
+}
+
+h1 { font-size: 22px; }
+h2 { font-size: 17px; }
+h3 { font-size: 15px; }
+
+/*
+ * Bidi isolation — mandatory, not cosmetic (docs/ux-copy.ar.md §14).
+ * Without this, `أضف سردًا للشريحة s12.` renders the period on the wrong side
+ * and adjacent numbers visually merge.
+ */
+.ltr {
+  unicode-bidi: isolate;
+  direction: ltr;
+  display: inline-block;
+}
+
+.num {
+  unicode-bidi: isolate;
+  direction: ltr;
+  font-variant-numeric: tabular-nums;
+}
+
+.mono {
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 0.9em;
+  unicode-bidi: isolate;
+  direction: ltr;
+}
+
+/* ── layout ──────────────────────────────────────────────────────────── */
+
+.shell {
+  display: grid;
+  grid-template-columns: 232px 1fr;
+  min-height: 100vh;
+}
+
+.sidebar {
+  background: var(--navy);
+  color: #cfdae3;
+  padding: var(--space-5) var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+.sidebar .brand {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 16px;
+  color: #fff;
+  line-height: 1.4;
+}
+
+.sidebar nav {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.sidebar nav a {
+  color: #cfdae3;
+  text-decoration: none;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+  font-size: 14px;
+}
+
+.sidebar nav a:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+}
+
+.sidebar nav a[aria-current="page"] {
+  background: var(--teal);
+  color: #fff;
+}
+
+.sidebar .foot {
+  margin-block-start: auto;
+  font-size: 12px;
+  color: #8fa3b3;
+}
+
+.main {
+  padding: var(--space-5) var(--space-6);
+  min-width: 0;
+}
+
+.page-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-4);
+  margin-block-end: var(--space-5);
+  flex-wrap: wrap;
+}
+
+/* ── components ──────────────────────────────────────────────────────── */
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: var(--space-4);
+}
+
+.btn {
+  font-family: var(--font-body);
+  font-size: 14px;
+  font-weight: 500;
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius-sm);
+  border: 1px solid transparent;
+  cursor: pointer;
+  /* Cost-bearing labels are long on purpose — wrap, never ellipsize. */
+  white-space: normal;
+  text-align: center;
+  line-height: 1.4;
+}
+
+.btn-primary {
+  background: var(--teal);
+  color: #fff;
+}
+.btn-primary:hover { background: var(--teal-hover); }
+
+.btn-secondary {
+  background: var(--surface);
+  color: var(--navy);
+  border-color: var(--border);
+}
+.btn-secondary:hover { background: var(--bg); }
+
+.btn:disabled { opacity: 0.55; cursor: not-allowed; }
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-block-end: var(--space-4);
+}
+
+.field label {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--navy);
+}
+
+.field input {
+  font-family: var(--font-body);
+  font-size: 15px;
+  padding: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text);
+}
+
+.field input:focus-visible {
+  outline: 2px solid var(--teal);
+  outline-offset: 1px;
+  border-color: var(--teal);
+}
+
+/* Email and password are Latin-script even in an RTL form. */
+.field input[type="email"],
+.field input[type="password"] {
+  direction: ltr;
+  text-align: start;
+}
+
+.alert {
+  border-radius: var(--radius-sm);
+  padding: var(--space-3);
+  font-size: 14px;
+  border: 1px solid;
+}
+
+.alert-error {
+  background: #fef2f2;
+  border-color: #fecaca;
+  color: #991b1b;
+}
+
+.alert-warn {
+  background: #fffbeb;
+  border-color: #fde68a;
+  color: #854d0e;
+}
+
+.muted { color: var(--muted); font-size: 13px; }
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-size: 12px;
+  font-weight: 500;
+  padding: 2px var(--space-2);
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--muted);
+}
+
+/* ── board ───────────────────────────────────────────────────────────── */
+
+.board {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(232px, 1fr);
+  gap: var(--space-3);
+  overflow-x: auto;
+  padding-block-end: var(--space-4);
+}
+
+.board-col {
+  background: transparent;
+  min-width: 0;
+}
+
+.board-col > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  margin-block-end: var(--space-2);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--navy);
+}
+
+/* The human gate — the only column where work waits on a person (§5). */
+.board-col[data-gate="true"] > header {
+  background: #fff7ed;
+  border-color: #fed7aa;
+  color: #9a3412;
+}
+
+.board-col[data-stopped="true"] > header {
+  background: #fef2f2;
+  border-color: #fecaca;
+  color: #991b1b;
+}
+
+.board-empty {
+  font-size: 12px;
+  color: var(--muted);
+  padding: var(--space-3);
+  text-align: center;
+}
+
+.login-wrap {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: var(--space-4);
+}
+
+.login-card {
+  inline-size: 100%;
+  max-inline-size: 380px;
+}
+
+.skip-link {
+  position: absolute;
+  inset-block-start: -100vh;
+}
+.skip-link:focus {
+  position: static;
+  display: inline-block;
+  margin-block-end: var(--space-3);
+}

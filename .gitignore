@@ -1,0 +1,26 @@
+node_modules/
+.pnpm-store/
+dist/
+build/
+.next/
+out/
+*.tsbuildinfo
+
+# secrets — never commit
+.env
+.env.*
+!.env.example
+
+# runtime state (Railway volume mirrors this locally)
+/data/
+data/
+*.log
+
+# worker artefacts
+shots/
+dokie-state.json
+
+.DS_Store
+.idea/
+.vscode/
+coverage/
