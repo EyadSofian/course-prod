@@ -5,13 +5,13 @@
   "type": "module",
   "scripts": {
     "dev": "next dev -p ${PORT:-3000}",
-    "//prebuild": "Next resolves @course-prod/core through its exports map, which points at dist/. Building core here — rather than relying on the caller passing `--filter @course-prod/web...` — means a bare `pnpm --filter @course-prod/web build` also works. Railway's Railpack builder emits exactly that command, and without this the build fails with 'Cannot resolve @course-prod/core/db'.",
+    "//prebuild": "Next resolves @course-prod/core through its exports map, which points at dist/. Building core here \u2014 rather than relying on the caller passing `--filter @course-prod/web...` \u2014 means a bare `pnpm --filter @course-prod/web build` also works. Railway's Railpack builder emits exactly that command, and without this the build fails with 'Cannot resolve @course-prod/core/db'.",
     "prebuild": "pnpm --filter @course-prod/core build",
     "build": "next build",
-    "//postbuild": "next build leaves .next/static and public outside the standalone tree, and `next start` refuses to run against a standalone build at all. Copying them in here makes the standalone output self-sufficient, so `pnpm start` works under any builder — Docker or Railway's Railpack — instead of only under the Dockerfile that did these copies itself.",
-    "postbuild": "cp -r .next/static .next/standalone/apps/web/.next/static && cp -r public .next/standalone/apps/web/public",
-    "//start": "HOSTNAME must be set explicitly: the standalone server binds to `process.env.HOSTNAME || '0.0.0.0'`, and Docker sets HOSTNAME to the container id, which binds to an address nothing can reach. `::` is dual-stack so it accepts IPv4 and IPv6.",
-    "start": "HOSTNAME=:: node .next/standalone/apps/web/server.js",
+    "//postbuild": "next build leaves .next/static and public outside the standalone tree, and `next start` refuses to run against a standalone build at all. Copying them in here makes the standalone output self-sufficient, so `pnpm start` works under any builder \u2014 Docker or Railway's Railpack \u2014 instead of only under the Dockerfile that did these copies itself.",
+    "postbuild": "cp -r .next/static .next/standalone/apps/web/.next/static && cp -r public .next/standalone/apps/web/public && cp server-start.mjs .next/standalone/apps/web/server-start.mjs",
+    "//start": "Launched through server-start.mjs, which pins the bind host in-process. Railway splits startCommand into argv with no shell, so an env prefix like `HOSTNAME=:: node ...` is read as a program name and fails.",
+    "start": "node .next/standalone/apps/web/server-start.mjs",
     "pretypecheck": "pnpm --filter @course-prod/core build",
     "typecheck": "tsc --noEmit",
     "lint": "next lint"
