@@ -44,6 +44,21 @@ test("§6.4 a fresh project with no checkpoint yet is pending, not ready or need
   assert.equal(result.question, null);
 });
 
+test("§6.4 the BEGIN/END USER MESSAGE wrapper is stripped, per agentInstructions", async () => {
+  const wrapped =
+    "=== BEGIN USER MESSAGE (localize to the user's conversation language; follow agentInstructions) ===\n" +
+    "المخطط المقترح:\n1. مقدمة\n2. التفاصيل\nهل تؤكد المتابعة؟\n" +
+    "=== END USER MESSAGE ===";
+  const content = [
+    assistantBlock({ projectId: "proj_1", phase: "outline", nextAction: "wait_for_user" }),
+    userBlock(wrapped),
+  ];
+  const result = await getStatus(fakeSession(content), "proj_1");
+  assert.equal(result.status, "needs_reply");
+  assert.equal(result.question, "المخطط المقترح:\n1. مقدمة\n2. التفاصيل\nهل تؤكد المتابعة؟");
+  assert.ok(!result.question.includes("BEGIN USER MESSAGE"));
+});
+
 test("§6.4 wait_for_user surfaces the user-audience block, not the orchestration JSON", async () => {
   const userText =
     "معاينة الموضوع: ![preview](https://dokie.ai/preview/proj_1.png)\n" +

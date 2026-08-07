@@ -168,8 +168,20 @@ interface DokieOrchestration {
   totalPages?: number;
   /** Documented values include get_project_status and wait_for_user. */
   nextAction?: string;
-  agentInstructions?: string;
+  agentInstructions?: string[];
   confirmationStep?: unknown;
+}
+
+/**
+ * The user-audience block arrives wrapped in delimiter lines —
+ * `=== BEGIN USER MESSAGE (...) === … === END USER MESSAGE ===` — that
+ * agentInstructions explicitly says to strip before showing a human the
+ * content between them. Falls back to the untouched text if the wrapper
+ * isn't there, since its exact wording is Dokie's, not a documented schema.
+ */
+function stripUserMessageWrapper(text: string): string {
+  const match = text.match(/===\s*BEGIN USER MESSAGE[^\n]*===\s*\n?([\s\S]*?)\n?\s*===\s*END USER MESSAGE\s*===/);
+  return match ? match[1]!.trim() : text;
 }
 
 interface ParsedDokieResult {
@@ -198,7 +210,7 @@ function parseDokieResult(result: unknown): ParsedDokieResult {
 
   return {
     orchestration,
-    userText: textFor(bs, "user").join("\n\n"),
+    userText: textFor(bs, "user").map(stripUserMessageWrapper).join("\n\n"),
     raw: allText(bs),
   };
 }
