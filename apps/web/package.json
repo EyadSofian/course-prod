@@ -8,7 +8,10 @@
     "//prebuild": "Next resolves @course-prod/core through its exports map, which points at dist/. Building core here — rather than relying on the caller passing `--filter @course-prod/web...` — means a bare `pnpm --filter @course-prod/web build` also works. Railway's Railpack builder emits exactly that command, and without this the build fails with 'Cannot resolve @course-prod/core/db'.",
     "prebuild": "pnpm --filter @course-prod/core build",
     "build": "next build",
-    "start": "next start -p ${PORT:-3000}",
+    "//postbuild": "next build leaves .next/static and public outside the standalone tree, and `next start` refuses to run against a standalone build at all. Copying them in here makes the standalone output self-sufficient, so `pnpm start` works under any builder — Docker or Railway's Railpack — instead of only under the Dockerfile that did these copies itself.",
+    "postbuild": "cp -r .next/static .next/standalone/apps/web/.next/static && cp -r public .next/standalone/apps/web/public",
+    "//start": "HOSTNAME=0.0.0.0 because the standalone server binds to localhost by default, which is unreachable from outside the container.",
+    "start": "HOSTNAME=0.0.0.0 node .next/standalone/apps/web/server.js",
     "pretypecheck": "pnpm --filter @course-prod/core build",
     "typecheck": "tsc --noEmit",
     "lint": "next lint"
