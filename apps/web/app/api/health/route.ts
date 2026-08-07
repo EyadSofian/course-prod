@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { pingDb } from "@course-prod/core/db";
+import { describeError } from "@course-prod/core/logger";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -28,7 +29,7 @@ export const runtime = "nodejs";
  */
 export async function GET() {
   const started = Date.now();
-  const db = await pingDb();
+  const [db, worker] = await Promise.all([pingDb(), pingWorker()]);
 
   const config = {
     sessionSecret: (process.env.SESSION_SECRET?.length ?? 0) >= 32,
@@ -47,6 +48,10 @@ export async function GET() {
       status,
       checks: {
         database: { ok: db.ok, latency_ms: db.latencyMs, ...(db.error ? { error: db.error } : {}) },
+        // Uploads and downloads all cross this hop, so a broken WORKER_URL
+        // breaks the product while every other check stays green. Reported
+        // with the host it tried, because the usual fault is the hostname.
+        worker,
         config,
       },
       uptime_s: Math.floor(process.uptime()),
@@ -56,4 +61,29 @@ export async function GET() {
     // is the only thing the deploy gate should be asking. See the note above.
     { status: 200, headers: { "cache-control": "no-store" } },
   );
+}
+
+/**
+ * Can this container actually reach the worker? Answered here so a broken
+ * private hostname is one curl away instead of surfacing as "fetch failed"
+ * the first time somebody uploads a file.
+ */
+async function pingWorker(): Promise<{
+  ok: boolean;
+  url: string;
+  latency_ms: number;
+  error?: string;
+}> {
+  const url = process.env.WORKER_URL ?? "";
+  if (!url) return { ok: false, url: "(not set)", latency_ms: 0, error: "WORKER_URL is not set" };
+
+  const started = Date.now();
+  try {
+    const res = await fetch(`${url.replace(/\/$/, "")}/health`, {
+      signal: AbortSignal.timeout(8_000),
+    });
+    return { ok: res.ok, url, latency_ms: Date.now() - started };
+  } catch (e) {
+    return { ok: false, url, latency_ms: Date.now() - started, error: describeError(e) };
+  }
 }

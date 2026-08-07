@@ -48,6 +48,17 @@ export function describeError(err: unknown): string {
     if (unique.length) return `${err.message || "AggregateError"}: ${unique.join("; ")}`;
   }
 
+  // Node's fetch reports every network failure as the bare string
+  // "fetch failed" and hides the real reason — ENOTFOUND, ECONNREFUSED,
+  // a TLS error — on `.cause`. Without unwrapping it, a wrong hostname and a
+  // dead port produce identical, useless messages.
+  const cause = (err as { cause?: unknown }).cause;
+  if (cause != null && cause !== err) {
+    const inner = describeError(cause);
+    const outer = err instanceof Error ? err.message : "";
+    if (inner && inner !== outer) return outer ? `${outer}: ${inner}` : inner;
+  }
+
   if (err instanceof Error) {
     const code = (err as NodeJS.ErrnoException).code;
     const parts = [err.message || err.name, code && !err.message?.includes(code) ? `(${code})` : ""];

@@ -1,4 +1,5 @@
 import "server-only";
+import { describeError } from "@course-prod/core/logger";
 
 /**
  * Client for the worker's private HTTP surface (§10).
@@ -30,11 +31,24 @@ async function request(path: string, init: RequestInit & { timeoutMs?: number } 
   const { baseUrl, serviceKey } = config();
   const { timeoutMs = 120_000, headers, ...rest } = init;
 
-  const res = await fetch(`${baseUrl}${path}`, {
-    ...rest,
-    headers: { ...headers, "x-service-key": serviceKey },
-    signal: AbortSignal.timeout(timeoutMs),
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${baseUrl}${path}`, {
+      ...rest,
+      headers: { ...headers, "x-service-key": serviceKey },
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+  } catch (e) {
+    // Name the host. Node's fetch says only "fetch failed", which cannot
+    // distinguish a wrong WORKER_URL from a worker that is down — and the
+    // first is by far the more common mistake on a private network where the
+    // hostname is derived from the service name.
+    throw new WorkerError(
+      `تعذّر الوصول إلى خدمة المعالجة على ${baseUrl} — ${describeError(e)}. ` +
+        `تحقّق من WORKER_URL ومن أن خدمة worker تعمل.`,
+      0,
+    );
+  }
 
   if (!res.ok) {
     const detail = await res

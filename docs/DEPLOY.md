@@ -105,6 +105,18 @@ required, not optional: a Railway volume mounts to exactly one service, so the
 web container cannot touch `/data` at all. Uploads are posted to the worker and
 downloads are streamed back through it, authenticated with `SERVICE_KEY`.
 
+> **The hostname is derived from the service name, not from the word
+> "worker".** A service named `@course-prod/worker` does *not* answer on
+> `worker.railway.internal`. Copy the exact value from
+> **worker service → Settings → Networking → Private Networking**, and keep the
+> `:3001` port on the end.
+>
+> Getting this wrong keeps every other check green — the app loads, login
+> works, the board renders — and fails only when someone uploads a file.
+> `GET /api/health` on the web service reports the hop under `checks.worker`,
+> with the host it tried and the resolver error, so this is one curl to
+> diagnose rather than a guess.
+
 `PUBLIC_URL` must match the real domain — signed download URLs are built from
 it, and a wrong value produces links that 404 for everyone but you.
 
