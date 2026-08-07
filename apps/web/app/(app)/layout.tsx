@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { endSession, getSession } from "@/lib/session";
 import { app, nav } from "@/lib/strings";
+import { Logo } from "@/components/logo";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const session = await getSession();
@@ -18,9 +19,13 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   return (
     <div className="shell">
       <aside className="sidebar">
-        <div className="brand">
-          {app.org}
-          <div style={{ fontSize: 13, fontWeight: 400, color: "#8fa3b3" }}>{app.name}</div>
+        <div>
+          <div className="brand">
+            <Logo size={30} tone="dark" />
+          </div>
+          <div className="brand-sub" style={{ marginBlockStart: 6 }}>
+            AI COURSE STUDIO
+          </div>
         </div>
 
         <nav aria-label="التنقل الرئيسي">

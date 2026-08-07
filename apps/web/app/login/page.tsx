@@ -1,5 +1,6 @@
 import { LoginForm } from "./login-form";
 import { app, auth } from "@/lib/strings";
+import { Logo } from "@/components/logo";
 
 /**
  * Server shell. Next 15 hands `searchParams` in as a Promise, so it is awaited
@@ -23,7 +24,7 @@ export default async function LoginPage({
     <main className="auth">
       <section className="auth-brand">
         <div className="auth-brand-inner">
-          <div className="auth-logo">{app.org}</div>
+          <Logo size={38} tone="light" />
           <h1 className="auth-headline">
             من المادة العلمية
             <br />
