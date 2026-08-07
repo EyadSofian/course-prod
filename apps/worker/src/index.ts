@@ -1,78 +1,51 @@
-import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
+import { createServer } from "node:http";
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
-import {
-  closeDb,
-  createLogger,
-  getBoss,
-  getWorkerEnv,
-  safeEqual,
-  stopBoss,
-} from "@course-prod/core";
-import { buildHealthReport } from "./health.js";
+import { closeDb, createLogger, getBoss, getWorkerEnv, stopBoss } from "@course-prod/core";
+import { workStage } from "@course-prod/core/queue";
+import { STAGES } from "@course-prod/core/stages";
+import { handleRequest } from "./http.js";
+import { registerStage, runStage } from "./runner.js";
+import { handleIngest } from "./stages/ingest.js";
+import { handleSummarize } from "./stages/summarize.js";
+import { handleDeck } from "./stages/deck.js";
+import { handleExport } from "./stages/export.js";
+import { handleNarrate } from "./stages/narrate.js";
+import { handleAssemble } from "./stages/assemble.js";
+import { handlePublish } from "./stages/publish.js";
 
 const log = createLogger("worker");
 const env = getWorkerEnv();
 
-/**
- * M1 worker: boots, owns the queue, exposes /health, and shuts down
- * gracefully. Stage handlers register here from M2 onward.
- */
+const state = { shuttingDown: false };
 
-let shuttingDown = false;
+registerStage("INGEST", handleIngest);
+registerStage("SUMMARIZE", handleSummarize);
+registerStage("DECK", handleDeck);
+registerStage("EXPORT", handleExport);
+registerStage("NARRATE", handleNarrate);
+registerStage("ASSEMBLE", handleAssemble);
+registerStage("PUBLISH", handlePublish);
 
-/* ── http surface ──────────────────────────────────────────────────────── */
-
-/**
- * §10: the worker's HTTP surface is protected by SERVICE_KEY and is not
- * publicly routed. /health is the one exception — Railway's probe cannot send
- * the header, and the report deliberately contains nothing sensitive.
- */
-function authorized(req: IncomingMessage): boolean {
-  const header = req.headers["x-service-key"];
-  const provided = Array.isArray(header) ? header[0] : header;
-  return Boolean(provided && safeEqual(provided, env.SERVICE_KEY));
-}
-
-function json(res: ServerResponse, status: number, body: unknown): void {
-  const payload = JSON.stringify(body);
-  res.writeHead(status, {
-    "content-type": "application/json; charset=utf-8",
-    "cache-control": "no-store",
-    "content-length": Buffer.byteLength(payload),
+const server = createServer((req, res) => {
+  void handleRequest(req, res, state).catch((e) => {
+    log.error("unhandled request error", { error: e });
+    if (!res.headersSent) res.writeHead(500, { "content-type": "application/json" });
+    res.end(JSON.stringify({ error: "internal error" }));
   });
-  res.end(payload);
-}
-
-const server = createServer(async (req, res) => {
-  const url = new URL(req.url ?? "/", `http://localhost:${env.PORT}`);
-
-  if (url.pathname === "/health") {
-    // While draining, report degraded so the load balancer stops routing here
-    // before the process actually goes away.
-    if (shuttingDown) return json(res, 503, { service: "worker", status: "draining" });
-    const report = await buildHealthReport(env.STATE_DIR);
-    return json(res, report.status === "ok" ? 200 : 503, report);
-  }
-
-  if (!authorized(req)) return json(res, 401, { error: "unauthorized" });
-
-  // /self-test lands in M4 alongside the Dokie exporter (§6.5).
-  return json(res, 404, { error: "not found" });
 });
 
-/* ── lifecycle ─────────────────────────────────────────────────────────── */
-
 async function start() {
-  // The volume must exist before any stage writes to it; on a fresh Railway
-  // volume these directories are not there.
   await mkdir(join(env.STATE_DIR, "objects"), { recursive: true });
   await mkdir(join(env.STATE_DIR, "shots"), { recursive: true });
 
   await getBoss(env.DATABASE_URL);
   log.info("queue connected");
 
-  // M2+: workStage("INGEST", handleIngest) and friends register here.
+  for (const stage of STAGES) {
+    await workStage(stage, (job) => runStage(job));
+  }
+  log.info("stage workers registered", { stages: STAGES });
 
   server.listen(env.PORT, () => {
     log.info("worker listening", { port: env.PORT, state_dir: env.STATE_DIR });
@@ -84,8 +57,8 @@ async function start() {
  * Railway redeploys mid-export otherwise corrupt a lesson.
  */
 async function shutdown(signal: string) {
-  if (shuttingDown) return;
-  shuttingDown = true;
+  if (state.shuttingDown) return;
+  state.shuttingDown = true;
   log.info("shutdown started", { signal });
 
   // Railway sends SIGKILL after ~30s; drain inside that window rather than
@@ -110,7 +83,6 @@ async function shutdown(signal: string) {
 
 process.on("SIGTERM", () => void shutdown("SIGTERM"));
 process.on("SIGINT", () => void shutdown("SIGINT"));
-
 process.on("unhandledRejection", (reason) => {
   log.error("unhandled rejection", { error: reason });
 });

@@ -19,37 +19,45 @@ docs/           DEPLOY.md, ux-copy.ar.md
 Queue is `pg-boss` on the same Postgres — no Redis. Storage sits behind an
 `ObjectStore` interface so S3/R2 is a config swap.
 
-## Status — Milestone 1
+## Status
 
 | M | Deliverable | State |
 |---|---|---|
-| 1 | Repo, Docker, Railway, auth, DB, `/health` | builds, tests pass, **not yet deployed** |
-| 2 | Ingest + Summarize + review editor | not started |
-| 3 | Dokie MCP integration | not started |
-| 4 | Export + PDF/PNG | not started |
-| 5 | Narration + dictionary | not started |
-| 6 | Assemble + publish + costs | not started |
+| 1 | Repo, Docker, Railway, auth, DB, `/health` | builds, tests pass, deploying |
+| 2 | Ingest + Summarize + review editor | code complete, **never run against a real API** |
+| 3 | Dokie MCP integration | code complete, **never run against Dokie** |
+| 4 | Export + PDF/PNG | code complete, **Phase 0 not done** |
+| 5 | Narration + dictionary | code complete, **never run against ElevenLabs** |
+| 6 | Assemble + publish + costs | code complete, **ffmpeg path never executed** |
 
-### What M1 has actually been verified to do
+### Verified
 
-- `pnpm typecheck`, `pnpm build` and `pnpm test` pass (8 tests covering the §4
-  invariant, §10 redaction and session/URL signing, §6.2 fence stripping, and
-  §6.3 slide reordering).
-- The **standalone** web build boots and serves: `/login` renders RTL Arabic,
-  an unauthenticated `/` 307s to `/login?next=/`, a forged signed URL is
-  rejected 403, and `/api/health` returns 503 `degraded` with the real
-  connection error when Postgres is absent.
-- The worker creates its `/data` subdirectories, fails fast with a structured
-  JSON error when Postgres is unreachable, and exits non-zero.
+- `pnpm typecheck`, `pnpm build`, `pnpm test` pass from a clean tree and a
+  fresh clone (26 tests).
+- Pure logic is covered: the §4 invariant, §10 redaction and signing, §6.2
+  fence stripping, §6.3 reordering, §6.6 Arabic whole-word replacement and TTS
+  chunking, §6.7 SRT generation including the text_raw/text_tts rule.
+- The standalone web build boots and serves login, the auth redirect, health,
+  and signed-URL rejection.
 
-### What is still unverified
+### Not verified — needs credentials or a deployed environment
 
-- **Neither Docker image has been built** — no Docker on the machine this was
-  written on.
-- **Nothing has run against a real Postgres.** Migrations are generated
-  (`packages/core/drizzle/0000_*.sql`, 8 tables) but have never been applied,
-  so `bootstrap:admin` and an end-to-end login are untested.
-- The M1 acceptance gate — *log in on the Railway URL* — has not been met.
+Nothing below has ever executed. It is written against the documented
+behaviour of each service, not against the services themselves.
+
+- **Summarize** has never called OpenAI. Needs `OPENAI_API_KEY`. This is the
+  M2 risk §12 names: the summarizer must be consistent across five different
+  source documents before the rest is worth trusting.
+- **Dokie** has never been contacted. The MCP response shapes are parsed
+  defensively and the raw text is kept in `stage_runs.log`, because they are
+  guesses until someone runs it.
+- **Export Phase 0 has not been done.** `DOKIE_EXPORT_ENDPOINT` is null, so
+  `BrowserExporter` is the only path and its selectors are guesses. See
+  §6.5 — the endpoint capture turns this into a plain HTTP call.
+- **ElevenLabs** has never been called.
+- **ffmpeg / LibreOffice / poppler** have never run: none are installed on the
+  machine this was written on. They exist only in the worker image.
+- **Neither Docker image has been built.**
 
 ## Quick start
 

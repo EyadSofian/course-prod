@@ -23,12 +23,23 @@ const webSchema = z.object({
   ...shared,
   SESSION_SECRET: z.string().min(32, "SESSION_SECRET must be at least 32 chars"),
   PORT: z.coerce.number().default(3000),
+  /**
+   * Private address of the worker. Required because the Railway volume mounts
+   * to exactly one service: web cannot read or write /data, so uploads and
+   * downloads are proxied through the worker's SERVICE_KEY-protected surface.
+   */
+  WORKER_URL: z.string().url().default("http://worker.railway.internal:3001"),
 });
 
 const workerSchema = z.object({
   ...shared,
   PORT: z.coerce.number().default(3001),
-  ANTHROPIC_API_KEY: z.string().startsWith("sk-ant-").optional(),
+  // Summarization provider (§6.2). Both are optional so the worker boots for
+  // stages that do not need them — a missing key fails its own stage with a
+  // clear terminal error rather than preventing the service from starting.
+  OPENAI_API_KEY: z.string().optional(),
+  OPENAI_BASE_URL: z.string().url().optional(),
+  ANTHROPIC_API_KEY: z.string().optional(),
   ELEVENLABS_API_KEY: z.string().optional(),
   ELEVENLABS_VOICE_ID: z.string().optional(),
   DOKIE_API_KEY: z.string().optional(),

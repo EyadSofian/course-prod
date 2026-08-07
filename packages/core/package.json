@@ -34,6 +34,26 @@
       "types": "./dist/stages.d.ts",
       "default": "./dist/stages.js"
     },
+    "./costs": {
+      "types": "./dist/costs.d.ts",
+      "default": "./dist/costs.js"
+    },
+    "./pronunciation": {
+      "types": "./dist/pronunciation.d.ts",
+      "default": "./dist/pronunciation.js"
+    },
+    "./providers/llm": {
+      "types": "./dist/providers/llm.d.ts",
+      "default": "./dist/providers/llm.js"
+    },
+    "./providers/tts": {
+      "types": "./dist/providers/tts.d.ts",
+      "default": "./dist/providers/tts.js"
+    },
+    "./providers/dokie": {
+      "types": "./dist/providers/dokie.d.ts",
+      "default": "./dist/providers/dokie.js"
+    },
     "./db": {
       "types": "./dist/db/index.d.ts",
       "default": "./dist/db/index.js"
@@ -49,6 +69,10 @@
     "./queue": {
       "types": "./dist/queue/index.d.ts",
       "default": "./dist/queue/index.js"
+    },
+    "./settings-store": {
+      "types": "./dist/settings-store.d.ts",
+      "default": "./dist/settings-store.js"
     }
   },
   "files": [
@@ -66,8 +90,10 @@
     "bootstrap:admin": "tsx src/scripts/bootstrap-admin.ts"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.0",
     "drizzle-orm": "^0.36.4",
     "hash-wasm": "^4.11.0",
+    "openai": "^4.77.0",
     "pg": "^8.13.1",
     "pg-boss": "^10.1.5",
     "zod": "^3.23.8"

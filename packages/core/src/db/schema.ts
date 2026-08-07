@@ -95,6 +95,14 @@ export const lessons = pgTable(
     /** Version counter for the §6.3 freeze: approving snapshots, editing bumps. */
     lessonVersion: integer("lesson_version").notNull().default(1),
     dokieProjectUrl: text("dokie_project_url"),
+    dokieProjectId: text("dokie_project_id"),
+    /**
+     * Set when Dokie asks for outline confirmation before generating (§6.4).
+     * A separate column rather than reuse of `error`: this is a question
+     * awaiting a human answer, not a failure, and the UI must not style it as
+     * one or offer a retry button for it.
+     */
+    dokiePendingQuestion: text("dokie_pending_question"),
     /** Producer-facing failure text. Cleared on a successful re-run. */
     error: text("error"),
     errorCode: text("error_code"),

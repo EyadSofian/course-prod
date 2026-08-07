@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { Readable } from "node:stream";
 import { createLogger } from "@course-prod/core/logger";
-import { createObjectStore, verifySignedKey } from "@course-prod/core/storage";
+import { verifySignedKey } from "@course-prod/core/storage";
+import { fetchObject } from "@/lib/worker";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -9,8 +9,12 @@ export const runtime = "nodejs";
 const log = createLogger("web.files");
 
 /**
- * Signed-URL file serving (§6.8). No public bucket: the volume is never exposed
- * directly, and every URL carries an HMAC and a 24h expiry.
+ * Signed-URL file serving (§6.8). No public bucket: every URL carries an HMAC
+ * and a 24h expiry, verified here before anything is read.
+ *
+ * The bytes themselves live on the worker's volume — Railway mounts a volume
+ * to exactly one service — so this route verifies the signature and then
+ * streams the object through the worker's private surface.
  */
 
 const CONTENT_TYPES: Record<string, string> = {
@@ -41,30 +45,31 @@ export async function GET(req: NextRequest) {
   }
 
   if (!verifySignedKey({ key, expires, sig }, secret)) {
-    // Expired and forged are the same response — a distinct "expired" message
-    // would let anyone probe which keys exist.
+    // Expired and forged get the same response — distinguishing them would let
+    // anyone probe which keys exist.
     return NextResponse.json({ error: "انتهت صلاحية الرابط أو أنه غير صالح." }, { status: 403 });
   }
 
-  const store = createObjectStore({
-    stateDir: process.env.STATE_DIR ?? "/data",
-    secret,
-    publicUrl: process.env.PUBLIC_URL ?? "http://localhost:3000",
-  });
-
-  const head = await store.headObject(key);
-  if (!head.exists) {
-    return NextResponse.json({ error: "الملف غير موجود." }, { status: 404 });
+  let upstream: Response;
+  try {
+    upstream = await fetchObject(key);
+  } catch (e) {
+    const status = (e as { status?: number }).status;
+    if (status === 404) return NextResponse.json({ error: "الملف غير موجود." }, { status: 404 });
+    log.error("failed to fetch object from worker", { key, error: e });
+    return NextResponse.json({ error: "تعذّر الوصول إلى الملف." }, { status: 502 });
   }
 
   const ext = key.split(".").pop()?.toLowerCase() ?? "";
-  const stream = await store.getStream(key);
+  const filename = key.split("/").pop() ?? "file";
 
-  return new NextResponse(Readable.toWeb(stream) as ReadableStream, {
+  return new NextResponse(upstream.body, {
     headers: {
       "content-type": CONTENT_TYPES[ext] ?? "application/octet-stream",
-      "content-length": String(head.bytes),
-      "content-disposition": `attachment; filename="${encodeURIComponent(key.split("/").pop() ?? "file")}"`,
+      ...(upstream.headers.get("content-length")
+        ? { "content-length": upstream.headers.get("content-length")! }
+        : {}),
+      "content-disposition": `attachment; filename*=UTF-8''${encodeURIComponent(filename)}`,
       "cache-control": "private, max-age=3600",
     },
   });

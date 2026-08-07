@@ -1,21 +1,41 @@
-import { eq } from "drizzle-orm";
 import { z } from "zod";
-import { getDb } from "./db/client.js";
-import { settings } from "./db/schema.js";
 
 /**
  * Models, voices, prompts, budgets and caps live here — never as literals in
  * business logic (§13). Anything a producer might want to change without a
  * deploy belongs in this file.
+ *
+ * This module is deliberately free of database imports. Client components need
+ * formatUsd and the TTS rate tables, and when those sat alongside loadSettings
+ * the pg driver followed them into the browser bundle and the build failed on
+ * `Can't resolve 'net'`. Reads and writes live in ./settings-store.ts.
  */
 
 export const settingsSchema = z.object({
-  // §6.2 — models are settings, not literals.
-  summarizeModel: z.string().default("claude-sonnet-5"),
-  summarizeModelDense: z.string().default("claude-opus-5"),
+  // §6.2 — models are settings, not literals. Provider is switchable because
+  // the deployment uses OpenAI; the Anthropic path is kept working so moving
+  // back is a settings change rather than a code change.
+  summarizeProvider: z.enum(["openai", "anthropic"]).default("openai"),
+  summarizeModel: z.string().default("gpt-5.6"),
+  summarizeModelDense: z.string().default("gpt-5.5-pro"),
   /** Char count above which the dense model is used automatically. */
   denseCharThreshold: z.number().int().positive().default(40_000),
   summarizeMaxTokens: z.number().int().positive().default(16_000),
+  /**
+   * USD per million tokens, per model. Settings rather than a hardcoded table
+   * because provider pricing changes more often than this code will.
+   * Unknown models fall back to `llmFallbackRate` and are flagged in the log
+   * so a silent $0.00 never masks real spend.
+   */
+  llmRates: z
+    .record(z.object({ inputPerMTok: z.number(), outputPerMTok: z.number() }))
+    .default({
+      "gpt-5.6": { inputPerMTok: 1.25, outputPerMTok: 10 },
+      "gpt-5.5-pro": { inputPerMTok: 15, outputPerMTok: 120 },
+    }),
+  llmFallbackRate: z
+    .object({ inputPerMTok: z.number(), outputPerMTok: z.number() })
+    .default({ inputPerMTok: 5, outputPerMTok: 20 }),
   /** UI override for packages/core/prompts/summarize.ar.md. Empty = use the file. */
   summarizePromptOverride: z.string().default(""),
 
@@ -51,31 +71,7 @@ export const TTS_USD_PER_1K_CHARS: Record<Settings["ttsModel"], number> = {
   eleven_flash_v2_5: 0.05,
 };
 
-const SETTINGS_KEY = "app";
-
-export async function loadSettings(): Promise<Settings> {
-  const db = getDb();
-  const [row] = await db.select().from(settings).where(eq(settings.key, SETTINGS_KEY)).limit(1);
-  if (!row) return DEFAULT_SETTINGS;
-
-  // Merge over defaults so a setting added in a later deploy does not read as
-  // undefined for an existing row.
-  const parsed = settingsSchema.safeParse({ ...DEFAULT_SETTINGS, ...(row.value as object) });
-  return parsed.success ? parsed.data : DEFAULT_SETTINGS;
-}
-
-export async function saveSettings(patch: Partial<Settings>, updatedBy?: string): Promise<Settings> {
-  const db = getDb();
-  const merged = settingsSchema.parse({ ...(await loadSettings()), ...patch });
-  await db
-    .insert(settings)
-    .values({ key: SETTINGS_KEY, value: merged, updatedBy })
-    .onConflictDoUpdate({
-      target: settings.key,
-      set: { value: merged, updatedBy, updatedAt: new Date() },
-    });
-  return merged;
-}
+export const SETTINGS_KEY = "app";
 
 export const centsPerUsd = 100;
 export const usdToCents = (usd: number) => Math.round(usd * centsPerUsd);

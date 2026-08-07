@@ -89,7 +89,13 @@ SERVICE_KEY=<from step 0>
 PUBLIC_URL=https://<your-web-domain>.up.railway.app
 STATE_DIR=/data
 MONTHLY_BUDGET_USD=300
+WORKER_URL=http://worker.railway.internal:3001
 ```
+
+`WORKER_URL` points at the worker over Railway's private network. It is
+required, not optional: a Railway volume mounts to exactly one service, so the
+web container cannot touch `/data` at all. Uploads are posted to the worker and
+downloads are streamed back through it, authenticated with `SERVICE_KEY`.
 
 `PUBLIC_URL` must match the real domain — signed download URLs are built from
 it, and a wrong value produces links that 404 for everyone but you.
@@ -126,16 +132,23 @@ STATE_DIR=/data
 MONTHLY_BUDGET_USD=300
 PORT=3001
 
-# added as the milestones land
-ANTHROPIC_API_KEY=          # M2
-DOKIE_API_KEY=              # M3
-DOKIE_EMAIL=                # M4
+SESSION_SECRET=<same value as web>
+
+# providers
+OPENAI_API_KEY=             # M2 — summarization
+DOKIE_API_KEY=              # M3 — MCP personal access token
+DOKIE_EMAIL=                # M4 — browser-export fallback only
 DOKIE_PASSWORD=             # M4
+DOKIE_SELFTEST_PROJECT_URL= # M4 — a finished project for the daily self-test
 ELEVENLABS_API_KEY=         # M5
 ELEVENLABS_VOICE_ID=        # M5
 TELEGRAM_BOT_TOKEN=
 TELEGRAM_CHAT_ID=
 ```
+
+`SESSION_SECRET` must be **identical** on both services. The worker signs
+download URLs and the web service verifies them; a mismatch 403s every link in
+the dashboard.
 
 §10 requires the worker not be publicly routed. Its only unauthenticated route
 is `/health`; everything else demands the `X-Service-Key` header.
