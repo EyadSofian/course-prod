@@ -13,7 +13,7 @@ import { queueDepth } from "@course-prod/core/queue";
 
 export interface HealthReport {
   service: "worker";
-  status: "ok" | "degraded";
+  status: "ok" | "degraded" | "misconfigured";
   checks: {
     database: { ok: boolean; latency_ms: number; error?: string };
     queue: { ok: boolean; depth?: Record<string, number>; error?: string };
@@ -41,7 +41,14 @@ export async function buildHealthReport(stateDir: string): Promise<HealthReport>
   // "missing" rather than failing, so a green /health in M1 is honest.
   const dokie = { ok: true, state: "missing" as const };
 
-  const status = db.ok && queue.ok && disk.ok ? "ok" : "degraded";
+  // Same split as the web service: the status *code* gates deploys, so only
+  // permanent misconfiguration should fail one. A database or queue that is
+  // briefly unreachable is reported as degraded and alerted on, rather than
+  // tearing down a container that would have recovered on its own.
+  const configOk =
+    (process.env.SERVICE_KEY?.length ?? 0) >= 32 && Boolean(process.env.DATABASE_URL);
+
+  const status = !configOk ? "misconfigured" : db.ok && queue.ok && disk.ok ? "ok" : "degraded";
 
   return {
     service: "worker",
