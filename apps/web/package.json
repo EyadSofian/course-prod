@@ -10,8 +10,8 @@
     "build": "next build",
     "//postbuild": "next build leaves .next/static and public outside the standalone tree, and `next start` refuses to run against a standalone build at all. Copying them in here makes the standalone output self-sufficient, so `pnpm start` works under any builder — Docker or Railway's Railpack — instead of only under the Dockerfile that did these copies itself.",
     "postbuild": "cp -r .next/static .next/standalone/apps/web/.next/static && cp -r public .next/standalone/apps/web/public",
-    "//start": "HOSTNAME=0.0.0.0 because the standalone server binds to localhost by default, which is unreachable from outside the container.",
-    "start": "HOSTNAME=0.0.0.0 node .next/standalone/apps/web/server.js",
+    "//start": "HOSTNAME must be set explicitly: the standalone server binds to `process.env.HOSTNAME || '0.0.0.0'`, and Docker sets HOSTNAME to the container id, which binds to an address nothing can reach. `::` is dual-stack so it accepts IPv4 and IPv6.",
+    "start": "HOSTNAME=:: node .next/standalone/apps/web/server.js",
     "pretypecheck": "pnpm --filter @course-prod/core build",
     "typecheck": "tsc --noEmit",
     "lint": "next lint"

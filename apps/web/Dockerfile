@@ -37,6 +37,17 @@ ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV PORT=3000
 
+# Next's standalone server binds to `process.env.HOSTNAME || '0.0.0.0'`, and
+# Docker sets HOSTNAME to the container id — so without this it tries to bind
+# to something like "a1b2c3d4" and nothing outside the container can reach it.
+# That is what failed Railway's healthcheck three deploys running while the
+# container itself looked perfectly healthy.
+#
+# "::" rather than 0.0.0.0 so the socket is dual-stack and accepts IPv6 too;
+# Railway's internal networking uses it, and the worker only ever passed its
+# healthcheck because server.listen(port) with no host already does this.
+ENV HOSTNAME="::"
+
 RUN groupadd --system --gid 1001 nodejs \
  && useradd --system --uid 1001 --gid nodejs nextjs
 
