@@ -65,6 +65,9 @@ export default async function LessonPage({ params }: { params: Promise<{ id: str
     grouped.set(a.kind, { count: g.count + 1, bytes: g.bytes + a.bytes, key: g.key });
   }
 
+  // A stopped lesson can never match a stage's entry status again, so the
+  // retry path has to be reopened explicitly.
+  const stopped = lesson.status === "FAILED" || lesson.status === "BLOCKED_BUDGET";
   const warning = budgetWarning(spend, settings);
 
   return (
@@ -121,7 +124,18 @@ export default async function LessonPage({ params }: { params: Promise<{ id: str
                 label={stageLabel[stage]}
                 run={latestByStage.get(stage) ?? null}
                 costCents={costByStage.get(stage) ?? 0}
-                runnable={lesson.status === STAGE_SPEC[stage].from}
+                runnable={
+                  // Normal case: the lesson sits at this stage's entry status.
+                  lesson.status === STAGE_SPEC[stage].from ||
+                  // Recovery case: the lesson is stopped and *this* is the
+                  // stage that stopped it. Without this the retry button
+                  // disappears the moment anything fails — FAILED is not any
+                  // stage's `from`, so a broken lesson became unrecoverable
+                  // from the UI and could only be fixed in the database.
+                  (stopped && latestByStage.get(stage)?.status !== "succeeded" &&
+                    latestByStage.get(stage) !== undefined)
+                }
+                recover={stopped}
                 billable={STAGE_SPEC[stage].billable}
                 busy={lesson.currentStage === stage}
                 runStage={runStage}

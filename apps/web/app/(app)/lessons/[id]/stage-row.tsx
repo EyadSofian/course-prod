@@ -30,6 +30,7 @@ export function StageRow({
   run,
   costCents,
   runnable,
+  recover,
   billable,
   busy,
   runStage,
@@ -40,6 +41,8 @@ export function StageRow({
   run: Run | null;
   costCents: number;
   runnable: boolean;
+  /** Lesson is stopped: this run has to bypass the entry-status guard. */
+  recover?: boolean;
   billable: boolean;
   busy: boolean;
   runStage: (formData: FormData) => Promise<void>;
@@ -89,6 +92,10 @@ export function StageRow({
           <form action={runStage}>
             <input type="hidden" name="lessonId" value={lessonId} />
             <input type="hidden" name="stage" value={stage} />
+            {/* A stopped lesson no longer matches this stage's entry status,
+                so the runner's guard would refuse it. force says "the human
+                asked for this deliberately". */}
+            {recover ? <input type="hidden" name="force" value="1" /> : null}
             <button type="submit" className="btn btn-primary">
               {failed || blocked ? actions.retry : `تشغيل`}
             </button>

@@ -57,11 +57,19 @@ export const settingsSchema = z.object({
 export type Settings = z.infer<typeof settingsSchema>;
 export const DEFAULT_SETTINGS: Settings = settingsSchema.parse({});
 
-/** Per-request hard limits from the ElevenLabs API (§6.6). Not user-editable. */
+/**
+ * Per-request hard limits, taken from ElevenLabs' own model documentation.
+ *
+ * §6.6 states 3,000 for eleven_v3 and this code copied that without checking.
+ * The published limit is 5,000, and flash is 40,000 rather than the 10,000
+ * assumed here. Under-stating a limit is not harmless: every split is a hard
+ * concat seam where prosody restarts, so narration was being broken into more
+ * pieces than the API ever required and sounding stitched together.
+ */
 export const TTS_CHAR_LIMITS: Record<Settings["ttsModel"], number> = {
-  eleven_v3: 3_000,
+  eleven_v3: 5_000,
   eleven_multilingual_v2: 10_000,
-  eleven_flash_v2_5: 10_000,
+  eleven_flash_v2_5: 40_000,
 };
 
 /** USD per 1,000 characters (§6.6). */
