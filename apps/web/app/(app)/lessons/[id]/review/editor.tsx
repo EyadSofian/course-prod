@@ -41,6 +41,7 @@ export function ReviewEditor({
   status,
   version,
   sourceText,
+  sourceError,
   lessonJson,
 }: {
   lessonId: string;
@@ -49,6 +50,7 @@ export function ReviewEditor({
   status: string;
   version: number;
   sourceText: string;
+  sourceError?: string | null;
   lessonJson: LessonJson;
 }) {
   const [draft, setDraft] = useState<LessonJson>(lessonJson);
@@ -68,17 +70,14 @@ export function ReviewEditor({
    */
   const issues = useMemo(() => validate(draft), [draft]);
 
-  const moveSlide = (index: number, direction: -1 | 1) => {
-    const target = index + direction;
-    if (target < 0 || target >= draft.slides.length) return;
 
-    const slides = [...draft.slides];
-    const [moved] = slides.splice(index, 1);
-    slides.splice(target, 0, moved!);
-
-    // Renumber slides and carry narration + quiz refs with them (§6.3). The
-    // mapping is derived from old id → new id, never from position, so a
-    // reorder can never desynchronise audio from slides (§13).
+  /**
+   * Renumbering is the only safe way to change the slide list. Every id is
+   * reassigned s01..sNN and narration and quiz refs are carried across by the
+   * old→new map — never by position, so adding or deleting a slide in the
+   * middle cannot silently pair slide 7's audio with slide 8's image (§13).
+   */
+  const rebuild = (slides: LessonJson["slides"], narration: LessonJson["narration"]) => {
     const remap = new Map<string, string>();
     const renumbered = slides.map((slide, i) => {
       const nextId = `s${String(i + 1).padStart(2, "0")}`;
@@ -86,15 +85,54 @@ export function ReviewEditor({
       return { ...slide, id: nextId };
     });
 
-    const byOldId = new Map(draft.narration.map((n) => [n.slide_id, n]));
-    const narration = slides.flatMap((slide) => {
+    const byOldId = new Map(narration.map((n) => [n.slide_id, n]));
+    const nextNarration = slides.flatMap((slide) => {
       const entry = byOldId.get(slide.id);
       return entry ? [{ ...entry, slide_id: remap.get(slide.id)! }] : [];
     });
 
-    const quiz = draft.quiz.map((q) => ({ ...q, slide_ref: remap.get(q.slide_ref) ?? q.slide_ref }));
+    // A question pointing at a deleted slide is re-pointed to the first slide
+    // rather than dropped: losing a written question silently is worse than a
+    // wrong reference the editor already flags.
+    const quiz = draft.quiz.map((q) => ({
+      ...q,
+      slide_ref: remap.get(q.slide_ref) ?? renumbered[0]?.id ?? q.slide_ref,
+    }));
 
-    update({ ...draft, slides: renumbered, narration, quiz });
+    update({ ...draft, slides: renumbered, narration: nextNarration, quiz });
+  };
+
+  const addSlide = (afterIndex: number) => {
+    const slides = [...draft.slides];
+    // Temporary id, immediately replaced by rebuild().
+    const tempId = `tmp-${Date.now()}`;
+    slides.splice(afterIndex + 1, 0, {
+      id: tempId,
+      layout: "concept",
+      title_ar: "عنوان الشريحة",
+      bullets: ["النقطة الأولى"],
+      visual_cue: "",
+      speaker_note_ar: "",
+    });
+    rebuild(slides, [
+      ...draft.narration,
+      { slide_id: tempId, text_raw: "نص السرد لهذه الشريحة.", text_tts: "", est_chars: 0 },
+    ]);
+  };
+
+  const removeSlide = (index: number) => {
+    if (draft.slides.length <= 1) return;
+    const slides = draft.slides.filter((_, i) => i !== index);
+    rebuild(slides, draft.narration);
+  };
+
+  const moveSlide = (index: number, direction: -1 | 1) => {
+    const target = index + direction;
+    if (target < 0 || target >= draft.slides.length) return;
+    const slides = [...draft.slides];
+    const [moved] = slides.splice(index, 1);
+    slides.splice(target, 0, moved!);
+    rebuild(slides, draft.narration);
   };
 
   return (
@@ -154,9 +192,19 @@ export function ReviewEditor({
       <div className="review-split">
         <section className="card review-pane">
           <h2>
-            النص المصدر <span className="muted num">({sourceText.length.toLocaleString("en-US")} حرف)</span>
+            النص المصدر{" "}
+            <span className="muted num">
+              {sourceError ? "—" : `(${sourceText.length.toLocaleString("en-US")} حرف)`}
+            </span>
           </h2>
-          <div className="source-text">{sourceText || "لا يوجد نص مصدر."}</div>
+          {sourceError ? (
+            <div className="alert alert-error" role="alert">
+              <strong>تعذّر تحميل النص المصدر</strong>
+              <div style={{ marginBlockStart: 4, fontSize: 12.5 }}>{sourceError}</div>
+            </div>
+          ) : (
+            <div className="source-text">{sourceText || "النص المستخرج فارغ."}</div>
+          )}
         </section>
 
         <section className="card review-pane">
@@ -173,17 +221,39 @@ export function ReviewEditor({
 
           <h3 style={{ marginBlockStart: 16 }}>الأهداف</h3>
           {draft.objectives.map((objective, i) => (
-            <input
-              key={i}
-              style={{ marginBlockEnd: 6, inlineSize: "100%" }}
-              value={objective}
-              onChange={(e) => {
-                const objectives = [...draft.objectives];
-                objectives[i] = e.target.value;
-                update({ ...draft, objectives });
-              }}
-            />
+            <div key={i} style={{ display: "flex", gap: 6, marginBlockEnd: 6 }}>
+              <input
+                style={{ flex: 1 }}
+                value={objective}
+                onChange={(e) => {
+                  const objectives = [...draft.objectives];
+                  objectives[i] = e.target.value;
+                  update({ ...draft, objectives });
+                }}
+              />
+              <button
+                type="button"
+                className="btn btn-ghost"
+                aria-label={`حذف الهدف ${i + 1}`}
+                disabled={draft.objectives.length <= 3}
+                title={draft.objectives.length <= 3 ? "الحد الأدنى ٣ أهداف" : "حذف"}
+                onClick={() => update({ ...draft, objectives: draft.objectives.filter((_, j) => j !== i) })}
+              >
+                ✕
+              </button>
+            </div>
           ))}
+          {draft.objectives.length < 5 ? (
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={() => update({ ...draft, objectives: [...draft.objectives, "هدف جديد"] })}
+            >
+              + إضافة هدف
+            </button>
+          ) : (
+            <span className="dim">الحد الأقصى ٥ أهداف.</span>
+          )}
 
           <h3 style={{ marginBlockStart: 16 }}>الشرائح والسرد</h3>
           {draft.slides.map((slide, i) => {
@@ -214,6 +284,26 @@ export function ReviewEditor({
                     >
                       ↓
                     </button>
+                    <button
+                      type="button"
+                      className="btn btn-ghost"
+                      onClick={() => addSlide(i)}
+                      aria-label={`إضافة شريحة بعد ${slide.id}`}
+                      title="إضافة شريحة بعدها"
+                    >
+                      +
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-ghost"
+                      onClick={() => removeSlide(i)}
+                      disabled={draft.slides.length <= 1}
+                      aria-label={`حذف ${slide.id}`}
+                      title="حذف الشريحة وسردها"
+                      style={{ color: "var(--crit)" }}
+                    >
+                      ✕
+                    </button>
                   </span>
                 </div>
 
@@ -233,17 +323,31 @@ export function ReviewEditor({
 
                 {slide.bullets.map((bullet, bi) => (
                   <div key={bi}>
-                    <input
-                      style={{ marginBlockStart: 4, inlineSize: "100%" }}
-                      value={bullet}
-                      onChange={(e) => {
-                        const slides = [...draft.slides];
-                        const bullets = [...slide.bullets];
-                        bullets[bi] = e.target.value;
-                        slides[i] = { ...slide, bullets };
-                        update({ ...draft, slides });
-                      }}
-                    />
+                    <div style={{ display: "flex", gap: 5, marginBlockStart: 4 }}>
+                      <input
+                        style={{ flex: 1 }}
+                        value={bullet}
+                        onChange={(e) => {
+                          const slides = [...draft.slides];
+                          const bullets = [...slide.bullets];
+                          bullets[bi] = e.target.value;
+                          slides[i] = { ...slide, bullets };
+                          update({ ...draft, slides });
+                        }}
+                      />
+                      <button
+                        type="button"
+                        className="btn btn-ghost"
+                        aria-label={`حذف النقطة ${bi + 1} من ${slide.id}`}
+                        onClick={() => {
+                          const slides = [...draft.slides];
+                          slides[i] = { ...slide, bullets: slide.bullets.filter((_, j) => j !== bi) };
+                          update({ ...draft, slides });
+                        }}
+                      >
+                        ✕
+                      </button>
+                    </div>
                     {words(bullet) > MAX_WORDS_PER_BULLET ? (
                       <span className="inline-warn">
                         النقطة {words(bullet)} كلمة، والحد {MAX_WORDS_PER_BULLET}.
@@ -251,11 +355,24 @@ export function ReviewEditor({
                     ) : null}
                   </div>
                 ))}
-                {slide.bullets.length > MAX_BULLETS_PER_SLIDE ? (
+                {slide.bullets.length < MAX_BULLETS_PER_SLIDE ? (
+                  <button
+                    type="button"
+                    className="btn btn-ghost"
+                    style={{ marginBlockStart: 4 }}
+                    onClick={() => {
+                      const slides = [...draft.slides];
+                      slides[i] = { ...slide, bullets: [...slide.bullets, "نقطة جديدة"] };
+                      update({ ...draft, slides });
+                    }}
+                  >
+                    + نقطة
+                  </button>
+                ) : (
                   <span className="inline-warn">
-                    الشريحة بها {slide.bullets.length} نقاط، والحد {MAX_BULLETS_PER_SLIDE}.
+                    بلغت الحد الأقصى {MAX_BULLETS_PER_SLIDE} نقاط لهذه الشريحة.
                   </span>
-                ) : null}
+                )}
 
                 <label className="narration-label">السرد</label>
                 {narration ? (

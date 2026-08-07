@@ -23,13 +23,20 @@ export default async function ReviewPage({ params }: { params: Promise<{ id: str
 
   // The source text lives on the worker's volume, so it comes back through the
   // worker's private surface rather than off local disk.
+  // Kept apart from the text itself: the previous version assigned the error
+  // message to sourceText, so the header cheerfully reported "41 حرف" — the
+  // length of its own failure notice — and swallowed the reason entirely.
   let sourceText = "";
-  if (lesson.sourceTextKey) {
+  let sourceError: string | null = null;
+
+  if (!lesson.sourceTextKey) {
+    sourceError = "لم يُستخرج النص بعد. شغّل مرحلة استخراج النص أولاً.";
+  } else {
     try {
       const res = await fetchObject(lesson.sourceTextKey);
       sourceText = await res.text();
-    } catch {
-      sourceText = "تعذّر تحميل النص المصدر من خدمة المعالجة.";
+    } catch (e) {
+      sourceError = e instanceof Error ? e.message : "تعذّر تحميل النص المصدر.";
     }
   }
 
@@ -41,6 +48,7 @@ export default async function ReviewPage({ params }: { params: Promise<{ id: str
       status={lesson.status}
       version={lesson.lessonVersion}
       sourceText={sourceText}
+      sourceError={sourceError}
       lessonJson={lesson.lessonJson as LessonJson}
     />
   );
