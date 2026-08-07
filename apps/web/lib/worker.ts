@@ -10,14 +10,6 @@ import { describeError } from "@course-prod/core/logger";
  * private network.
  */
 
-function config(): { baseUrl: string; serviceKey: string } {
-  const baseUrl = process.env.WORKER_URL;
-  const serviceKey = process.env.SERVICE_KEY;
-  if (!baseUrl) throw new Error("WORKER_URL is not set");
-  if (!serviceKey) throw new Error("SERVICE_KEY is not set");
-  return { baseUrl: baseUrl.replace(/\/$/, ""), serviceKey };
-}
-
 export class WorkerError extends Error {
   constructor(
     message: string,
@@ -25,6 +17,43 @@ export class WorkerError extends Error {
   ) {
     super(message);
   }
+}
+
+function config(): { baseUrl: string; serviceKey: string } {
+  const raw = process.env.WORKER_URL;
+  const serviceKey = process.env.SERVICE_KEY;
+
+  if (!raw) {
+    throw new WorkerError(
+      "WORKER_URL غير مضبوط على خدمة web. اضبطه على " +
+        "http://${{worker.RAILWAY_PRIVATE_DOMAIN}}:3001",
+      0,
+    );
+  }
+  if (!serviceKey) throw new WorkerError("SERVICE_KEY غير مضبوط على خدمة web.", 0);
+
+  // A protocol-relative value like `//host:3001` is valid in a browser and
+  // rejected by Node's fetch, which then fails with a message that says
+  // nothing about the missing scheme. Catch it here where the fix is obvious.
+  const baseUrl = raw.trim().replace(/\/$/, "");
+  let parsed: URL;
+  try {
+    parsed = new URL(baseUrl);
+  } catch {
+    throw new WorkerError(
+      `WORKER_URL غير صالح: «${baseUrl}» — ينقصه البروتوكول على الأرجح. ` +
+        `المتوقّع http://<host>:3001`,
+      0,
+    );
+  }
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+    throw new WorkerError(
+      `WORKER_URL يستخدم بروتوكولاً غير مدعوم (${parsed.protocol}). المتوقّع http أو https.`,
+      0,
+    );
+  }
+
+  return { baseUrl, serviceKey };
 }
 
 async function request(path: string, init: RequestInit & { timeoutMs?: number } = {}) {
