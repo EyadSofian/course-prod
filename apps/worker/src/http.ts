@@ -9,6 +9,7 @@ import { enqueueStage } from "@course-prod/core/queue";
 import { STAGES, type Stage } from "@course-prod/core/stages";
 import { lessonKey } from "@course-prod/core/storage";
 import { listVoices } from "@course-prod/core/providers/voices";
+import { connect as connectDokie, listDokieTools } from "@course-prod/core/providers/dokie";
 import { objectStore } from "./context.js";
 import { isAccepted, MAX_UPLOAD_BYTES } from "./extract.js";
 import { answerDeckQuestion } from "./stages/deck.js";
@@ -82,6 +83,7 @@ export async function handleRequest(
     if (url.pathname === "/self-test") return json(res, 200, await runSelfTest());
     if (url.pathname === "/voices" && req.method === "GET") return await voices(res);
     if (url.pathname === "/providers" && req.method === "GET") return providers(res);
+    if (url.pathname === "/dokie/tools" && req.method === "GET") return await dokieTools(res);
   } catch (e) {
     const status = (e as { statusCode?: number }).statusCode ?? 500;
     log.error("request failed", { path: url.pathname, error: e });
@@ -192,6 +194,21 @@ function providers(res: ServerResponse): void {
     dokieLogin: Boolean(process.env.DOKIE_EMAIL && process.env.DOKIE_PASSWORD),
     telegram: Boolean(process.env.TELEGRAM_BOT_TOKEN && process.env.TELEGRAM_CHAT_ID),
   });
+}
+
+/**
+ * Reads Dokie's MCP tool surface back from the server itself. Dokie
+ * publishes no schema, and two of the tool/argument names this codebase
+ * assumed have already turned out wrong — this is the diagnostic for next
+ * time, one curl instead of another round of guessing.
+ */
+async function dokieTools(res: ServerResponse): Promise<void> {
+  const session = await connectDokie();
+  try {
+    return json(res, 200, { tools: await listDokieTools(session) });
+  } finally {
+    await session.close();
+  }
 }
 
 async function dokieReply(req: IncomingMessage, res: ServerResponse): Promise<void> {

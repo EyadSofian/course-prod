@@ -9,9 +9,16 @@ const log = createLogger("dokie");
 /**
  * Dokie MCP deck generation (§6.4).
  *
- * Only three tools exist: create_ppt, reply_ppt, get_ppt_status. Nothing here
- * retries a generation automatically — credits are real money (§13). A failed
- * generation surfaces to a human who decides whether to spend again.
+ * Nothing here retries a generation automatically — credits are real money
+ * (§13). A failed generation surfaces to a human who decides whether to spend
+ * again.
+ *
+ * Dokie publishes no schema for its MCP surface. The tool names below
+ * (create_ppt, reply_ppt, get_ppt_status) and create_ppt's `topic` argument
+ * are both things that were wrong once already — an assumed name that
+ * doesn't exist errors before any credit is spent (MCP validates before a
+ * tool runs), so `listDokieTools` exists to read the real, current surface
+ * back from the server instead of guessing again next time it drifts.
  */
 
 export const DOKIE_MCP_URL = "https://mcp.dokie.ai/mcp";
@@ -61,6 +68,18 @@ export async function connect(): Promise<DokieSession> {
       await client.close().catch(() => {});
     },
   };
+}
+
+export interface DokieToolInfo {
+  name: string;
+  description?: string;
+  inputSchema: unknown;
+}
+
+/** Ground truth for Dokie's current MCP surface — see the module comment. */
+export async function listDokieTools(session: DokieSession): Promise<DokieToolInfo[]> {
+  const { tools } = await session.client.listTools();
+  return tools.map((t) => ({ name: t.name, description: t.description, inputSchema: t.inputSchema }));
 }
 
 /**
