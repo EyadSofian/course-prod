@@ -7,18 +7,21 @@ export const runtime = "nodejs";
 /**
  * §9: /health on both services.
  *
- * The status code is a *deploy gate*, not a monitor. Railway rolls a
- * deployment back when this returns non-2xx, so the two kinds of problem get
- * different treatment:
+ * The status code is a *deploy gate*, not a monitor, and it answers exactly
+ * one question: is this container serving HTTP? If this handler runs at all,
+ * the answer is yes, so it always returns 200.
  *
- *   - Bad configuration is permanent. A deploy with a missing SESSION_SECRET
- *     will never become healthy, so it returns 503 and should be rolled back.
+ * Everything else — database reachability, missing configuration — is reported
+ * in the body and is for monitoring to alert on. Two rounds of failed deploys
+ * taught this the hard way: a non-2xx here makes Railway tear the deployment
+ * down, so any condition that could ever be transient (or that we simply
+ * mis-predicted, as happened with the config list) takes the whole service
+ * offline instead of leaving a degraded one that recovers.
  *
- *   - An unreachable database is usually transient. Returning 503 for it meant
- *     a database blip during a deploy tore down a perfectly good container and
- *     left no service at all, instead of a degraded one that recovers when the
- *     database comes back. It is reported in the body as "degraded" and
- *     alerted on from there.
+ * Check `status` in the body, not the HTTP code:
+ *   "ok"            everything reachable
+ *   "degraded"      serving, but the database is unreachable
+ *   "misconfigured" serving, but a required variable is missing or too short
  *
  * Public (see middleware PUBLIC_PATHS) so Railway can probe it, and therefore
  * deliberately free of anything that would leak topology or secrets.
@@ -49,7 +52,8 @@ export async function GET() {
       uptime_s: Math.floor(process.uptime()),
       took_ms: Date.now() - started,
     },
-    // 503 only for misconfiguration — see the note above.
-    { status: configOk ? 200 : 503, headers: { "cache-control": "no-store" } },
+    // Always 200 — reaching this line proves the container serves HTTP, which
+    // is the only thing the deploy gate should be asking. See the note above.
+    { status: 200, headers: { "cache-control": "no-store" } },
   );
 }

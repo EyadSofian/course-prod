@@ -65,10 +65,10 @@ export async function handleRequest(
   if (url.pathname === "/health") {
     if (state.shuttingDown) return json(res, 503, { service: "worker", status: "draining" });
     const report = await buildHealthReport(env.STATE_DIR);
-    // 503 only when misconfigured — a degraded database or queue still serves
-    // and recovers, and failing the healthcheck for it would roll the deploy
-    // back rather than let it heal. See apps/web/app/api/health/route.ts.
-    return json(res, report.status === "misconfigured" ? 503 : 200, report);
+    // Always 200: reaching here proves the process serves HTTP, which is all
+    // the deploy gate should ask. The real state is in `status` in the body.
+    // See apps/web/app/api/health/route.ts for the full reasoning.
+    return json(res, 200, report);
   }
 
   if (!authorized(req)) return json(res, 401, { error: "unauthorized" });
