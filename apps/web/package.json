@@ -5,8 +5,11 @@
   "type": "module",
   "scripts": {
     "dev": "next dev -p ${PORT:-3000}",
+    "//prebuild": "Next resolves @course-prod/core through its exports map, which points at dist/. Building core here — rather than relying on the caller passing `--filter @course-prod/web...` — means a bare `pnpm --filter @course-prod/web build` also works. Railway's Railpack builder emits exactly that command, and without this the build fails with 'Cannot resolve @course-prod/core/db'.",
+    "prebuild": "pnpm --filter @course-prod/core build",
     "build": "next build",
     "start": "next start -p ${PORT:-3000}",
+    "pretypecheck": "pnpm --filter @course-prod/core build",
     "typecheck": "tsc --noEmit",
     "lint": "next lint"
   },

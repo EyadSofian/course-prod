@@ -67,9 +67,17 @@ Settings:
 | Setting | Value |
 |---|---|
 | Root directory | `/` (repo root — the Dockerfile needs the workspace) |
-| Dockerfile path | `apps/web/Dockerfile` |
-| Health check path | `/api/health` |
-| Health check timeout | 30s |
+| **Config-as-code path** | **`apps/web/railway.json`** |
+| Health check path | `/api/health` (also set by railway.json) |
+
+> **Set the config-as-code path, or Railway will ignore the Dockerfile.**
+> Left unset, Railway auto-detects Node and builds with Railpack instead,
+> which runs `pnpm --filter @course-prod/web build` and its own start command.
+> `apps/web/railway.json` pins `builder: DOCKERFILE` and the Dockerfile path.
+>
+> In the dashboard this lives under **Settings → Config-as-code**. Setting the
+> Dockerfile path directly in **Settings → Build** works too, but the JSON file
+> keeps the choice in git where it is reviewable.
 
 Variables:
 
@@ -98,10 +106,14 @@ Generate the domain under **Settings → Networking → Generate Domain**, then 
 | Setting | Value |
 |---|---|
 | Root directory | `/` |
-| Dockerfile path | `apps/worker/Dockerfile` |
-| Health check path | `/health` |
-| Health check timeout | 60s (the image is ~2 GB and boots slower) |
+| **Config-as-code path** | **`apps/worker/railway.json`** |
+| Health check path | `/health` (also set by railway.json, 60s timeout — the image is ~2 GB and boots slower) |
 | Networking | **do not** generate a public domain |
+
+The config-as-code path is not optional here. Railpack cannot produce this
+image at all: the worker needs LibreOffice, poppler, ffmpeg and Playwright's
+browser stack, none of which a Node auto-detection provides. Without it the
+service builds "successfully" and then fails at the first export.
 
 Variables:
 
