@@ -75,9 +75,17 @@ Settings:
 > which runs `pnpm --filter @course-prod/web build` and its own start command.
 > `apps/web/railway.json` pins `builder: DOCKERFILE` and the Dockerfile path.
 >
-> In the dashboard this lives under **Settings → Config-as-code**. Setting the
-> Dockerfile path directly in **Settings → Build** works too, but the JSON file
-> keeps the choice in git where it is reviewable.
+> In the dashboard this lives under **Settings → Config-as-code**. Railway's
+> docs describe the value as a repository-absolute path, so `/apps/web/railway.json`
+> is the documented form; `apps/web/railway.json` has also been observed to work.
+>
+> **A leftover Custom Start Command will break the Dockerfile build.** If the
+> service ever built with Railpack, Railway remembers a start command of
+> `pnpm start` — and the Dockerfile's runtime stage is `node:22-slim`, which has
+> no pnpm, so the container fails to create with
+> "The executable `pnpm` could not be found". Both railway.json files now pin
+> `deploy.startCommand` explicitly, which overrides that stale value; clearing
+> the field under **Settings → Deploy** also works.
 
 Variables:
 

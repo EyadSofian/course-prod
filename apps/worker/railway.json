@@ -5,6 +5,7 @@
     "dockerfilePath": "apps/worker/Dockerfile"
   },
   "deploy": {
+    "startCommand": "node apps/worker/dist/index.js",
     "healthcheckPath": "/health",
     "healthcheckTimeout": 60,
     "restartPolicyType": "ON_FAILURE",
