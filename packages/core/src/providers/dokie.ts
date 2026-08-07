@@ -113,39 +113,40 @@ export function buildDeckBrief(lesson: LessonJson): string {
   return lines.join("\n");
 }
 
-/** Text content flattened out of an MCP tool result, for defensive parsing. */
-function resultText(result: unknown): string {
-  const content = (result as { content?: unknown })?.content;
-  if (!Array.isArray(content)) return typeof result === "string" ? result : JSON.stringify(result);
-  return content
-    .map((c) => (typeof c === "object" && c && "text" in c ? String((c as { text: unknown }).text) : ""))
-    .filter(Boolean)
-    .join("\n");
-}
-
 /**
- * Dokie's exact payload shape is not documented, so every field is pulled out
- * defensively and the raw text is always returned for stage_runs.log. A schema
- * change should surface as "we could not find the project URL" with the raw
- * response attached, not as a crash.
+ * One content block from an MCP tool result. Every create_ppt / reply_dokie /
+ * get_project_status response carries the same two-audience shape — verbatim
+ * from each tool's description in GET /dokie/tools: a text block tagged
+ * `assistant` holding an orchestration JSON (projectId, phase, running,
+ * completedPages/totalPages, nextAction, agentInstructions), and separate
+ * block(s) tagged `user` holding what a human should actually see (keyinfo,
+ * outline, preview images, the project link). Dokie is explicit the two must
+ * not be conflated — showing the raw orchestration JSON to a person, or
+ * substituting its `reply` field for the real `user` block, both lose the
+ * formatted checkpoint content it describes as the only complete version.
  */
-function extractProjectUrl(text: string): string | null {
-  const match = text.match(/https?:\/\/[^\s"'<>)\]]+/g);
-  if (!match) return null;
-  return match.find((u) => /dokie\.ai/i.test(u)) ?? match[0] ?? null;
+interface DokieBlock {
+  type?: string;
+  text?: string;
+  annotations?: { audience?: string[] };
 }
 
-function extractProjectId(text: string): string | null {
-  const json = tryJson(text);
-  if (json) {
-    for (const key of ["project_id", "projectId", "id", "ppt_id", "pptId"]) {
-      const v = (json as Record<string, unknown>)[key];
-      if (typeof v === "string" && v) return v;
-    }
-  }
-  const url = extractProjectUrl(text);
-  const fromUrl = url?.match(/\/([A-Za-z0-9_-]{6,})\/?$/)?.[1];
-  return fromUrl ?? null;
+function blocks(result: unknown): DokieBlock[] {
+  const content = (result as { content?: unknown })?.content;
+  return Array.isArray(content) ? (content as DokieBlock[]) : [];
+}
+
+function textFor(bs: DokieBlock[], audience: "assistant" | "user"): string[] {
+  return bs
+    .filter((b) => b.type === "text" && typeof b.text === "string" && b.annotations?.audience?.includes(audience))
+    .map((b) => b.text as string);
+}
+
+function allText(bs: DokieBlock[]): string {
+  return bs
+    .filter((b) => b.type === "text" && typeof b.text === "string")
+    .map((b) => b.text as string)
+    .join("\n");
 }
 
 function tryJson(text: string): unknown | null {
@@ -156,6 +157,56 @@ function tryJson(text: string): unknown | null {
   } catch {
     return null;
   }
+}
+
+interface DokieOrchestration {
+  projectId?: string;
+  /** Documented values: init | keyinfo | outline | generated | done. */
+  phase?: string;
+  running?: boolean;
+  completedPages?: number;
+  totalPages?: number;
+  /** Documented values include get_project_status and wait_for_user. */
+  nextAction?: string;
+  agentInstructions?: string;
+  confirmationStep?: unknown;
+}
+
+interface ParsedDokieResult {
+  orchestration: DokieOrchestration | null;
+  /** What a producer should see — the audience:user block(s), verbatim. */
+  userText: string;
+  /** Every block, for stage_runs.log and for the "shape didn't match" fallback. */
+  raw: string;
+}
+
+function parseDokieResult(result: unknown): ParsedDokieResult {
+  const bs = blocks(result);
+  const assistantText = textFor(bs, "assistant")[0];
+  const orchestration = assistantText ? (tryJson(assistantText) as DokieOrchestration | null) : null;
+
+  // agentInstructions (forwarding/translation/URL-preservation rules) is
+  // written for an LLM agent to interpret — this worker has no LLM in the
+  // deck stage, so it forwards `userText` verbatim rather than pretending to
+  // apply them. Logged so a real mismatch (Dokie asking for handling this
+  // pipeline doesn't do) is visible instead of silently dropped.
+  if (orchestration?.agentInstructions) {
+    log.info("dokie agentInstructions received (forwarded verbatim, not executed)", {
+      instructions: orchestration.agentInstructions,
+    });
+  }
+
+  return {
+    orchestration,
+    userText: textFor(bs, "user").join("\n\n"),
+    raw: allText(bs),
+  };
+}
+
+function extractProjectUrl(text: string): string | null {
+  const match = text.match(/https?:\/\/[^\s"'<>)\]]+/g);
+  if (!match) return null;
+  return match.find((u) => /dokie\.ai/i.test(u)) ?? match[0] ?? null;
 }
 
 export type DeckStatus = "pending" | "needs_reply" | "ready" | "failed";
@@ -169,12 +220,36 @@ export interface StatusResult {
   raw: string;
 }
 
-function classifyStatus(text: string): DeckStatus {
-  const lower = text.toLowerCase();
-  if (/\b(failed|error|cancell?ed)\b/.test(lower)) return "failed";
-  if (/\b(completed|complete|ready|success|done|finished)\b/.test(lower)) return "ready";
-  if (/\b(confirm|approve|question|awaiting|outline|reply)\b/.test(lower)) return "needs_reply";
+function classifyStatus(o: DokieOrchestration | null): DeckStatus {
+  // No parseable orchestration block is an unexpected shape, not evidence of
+  // failure — treat as still-running so a format drift surfaces as a stall
+  // in stage_runs.log rather than a wrongly terminal error.
+  if (!o) return "pending";
+  if (o.nextAction === "wait_for_user" || o.confirmationStep) return "needs_reply";
+  // "failed" is not among the phases the tool description enumerates
+  // (init | keyinfo | outline | generated | done) — this is a defensive net
+  // for a value it doesn't document, not the primary signal.
+  if (/fail|error|cancel/i.test(`${o.phase ?? ""} ${o.nextAction ?? ""}`)) return "failed";
+  if (o.phase === "done") return "ready";
   return "pending";
+}
+
+function toStatusResult(parsed: ParsedDokieResult, fallbackProjectId?: string): StatusResult {
+  const status = classifyStatus(parsed.orchestration);
+  // Only fall back to scanning the whole response for a URL once phase=done
+  // independently confirms completion. Otherwise an unrelated URL sitting in
+  // the orchestration JSON (a debug or preview endpoint, say) could be
+  // mistaken for the project link while generation is still in progress —
+  // the fallback exists for "the user block's shape drifted," not as a
+  // second place to look during every ordinary poll.
+  const projectUrl = extractProjectUrl(parsed.userText) ?? (status === "ready" ? extractProjectUrl(parsed.raw) : null);
+  return {
+    status,
+    projectId: parsed.orchestration?.projectId ?? fallbackProjectId ?? null,
+    projectUrl,
+    question: status === "needs_reply" ? parsed.userText || parsed.raw : null,
+    raw: parsed.raw,
+  };
 }
 
 export async function createPpt(
@@ -182,15 +257,8 @@ export async function createPpt(
   topic: string,
   brief: string,
 ): Promise<StatusResult> {
-  const raw = await callTool(session, DOKIE_TOOLS.create, { topic, context: brief });
-  const status = classifyStatus(raw);
-  return {
-    status: status === "pending" ? "pending" : status,
-    projectUrl: extractProjectUrl(raw),
-    projectId: extractProjectId(raw),
-    question: status === "needs_reply" ? raw : null,
-    raw,
-  };
+  const parsed = await callTool(session, DOKIE_TOOLS.create, { topic, context: brief });
+  return toStatusResult(parsed);
 }
 
 export async function replyPpt(
@@ -198,46 +266,32 @@ export async function replyPpt(
   projectId: string,
   answer: string,
 ): Promise<StatusResult> {
-  const raw = await callTool(session, DOKIE_TOOLS.reply, { projectId, message: answer });
-  const status = classifyStatus(raw);
-  return {
-    status,
-    projectUrl: extractProjectUrl(raw),
-    projectId: extractProjectId(raw) ?? projectId,
-    question: status === "needs_reply" ? raw : null,
-    raw,
-  };
+  const parsed = await callTool(session, DOKIE_TOOLS.reply, { projectId, message: answer });
+  return toStatusResult(parsed, projectId);
 }
 
 export async function getStatus(
   session: DokieSession,
   projectId: string,
 ): Promise<StatusResult> {
-  const raw = await callTool(session, DOKIE_TOOLS.status, { projectId });
-  const status = classifyStatus(raw);
-  return {
-    status,
-    projectUrl: extractProjectUrl(raw),
-    projectId,
-    question: status === "needs_reply" ? raw : null,
-    raw,
-  };
+  const parsed = await callTool(session, DOKIE_TOOLS.status, { projectId });
+  return toStatusResult(parsed, projectId);
 }
 
 async function callTool(
   session: DokieSession,
   name: string,
   args: Record<string, unknown>,
-): Promise<string> {
+): Promise<ParsedDokieResult> {
   try {
     const result = await session.client.callTool({ name, arguments: args });
     if ((result as { isError?: boolean }).isError) {
       throw new TerminalError(
-        `رفضت Dokie الطلب (${name}): ${resultText(result).slice(0, 500)}`,
+        `رفضت Dokie الطلب (${name}): ${allText(blocks(result)).slice(0, 500)}`,
         "SELECTOR_NOT_FOUND",
       );
     }
-    return resultText(result);
+    return parseDokieResult(result);
   } catch (e) {
     if (e instanceof TerminalError) throw e;
     throw classifyDokieError(e, `فشل استدعاء ${name} في Dokie`);
