@@ -13,24 +13,27 @@ const log = createLogger("dokie");
  * (§13). A failed generation surfaces to a human who decides whether to spend
  * again.
  *
- * Dokie publishes no schema for its MCP surface. The tool names below
- * (create_ppt, reply_ppt, get_ppt_status) and create_ppt's `topic` argument
- * are both things that were wrong once already — an assumed name that
- * doesn't exist errors before any credit is spent (MCP validates before a
- * tool runs), so `listDokieTools` exists to read the real, current surface
- * back from the server instead of guessing again next time it drifts.
+ * Dokie publishes no schema for its MCP surface — everything below is taken
+ * from GET /dokie/tools (a live listTools() call), not from docs. Two things
+ * this codebase assumed were wrong: `reply_ppt` and `get_ppt_status` are not
+ * real tool names (they're `reply_dokie` and `get_project_status`), and
+ * create_ppt's real shape is `{ topic, context? }` with
+ * `additionalProperties: false` — the detailed slide-by-slide brief was
+ * being sent as `content`/`prompt`, fields the tool doesn't declare, and
+ * silently dropped rather than rejected. If either drifts again, hit
+ * /dokie/tools rather than re-guessing.
  */
 
 export const DOKIE_MCP_URL = "https://mcp.dokie.ai/mcp";
 
 export const DOKIE_TOOLS = {
   create: "create_ppt",
-  reply: "reply_ppt",
-  status: "get_ppt_status",
+  reply: "reply_dokie",
+  status: "get_project_status",
 } as const;
 
-/** §6.4 polling schedule: 5s → 15s → 30s, capped at 15 minutes total. */
-export const POLL_SCHEDULE_MS = [5_000, 15_000, 30_000] as const;
+/** Dokie's own documented cadence: poll get_project_status every 20s. */
+export const POLL_SCHEDULE_MS = [20_000] as const;
 export const POLL_CAP_MS = 15 * 60 * 1000;
 
 export interface DokieSession {
@@ -179,11 +182,7 @@ export async function createPpt(
   topic: string,
   brief: string,
 ): Promise<StatusResult> {
-  // create_ppt rejects a call missing `topic` outright (schema-validated
-  // before the tool runs, so this costs nothing) — `prompt`/`content` alone
-  // are not enough. Dokie's schema is otherwise undocumented; this is the
-  // one required field the server has actually told us about.
-  const raw = await callTool(session, DOKIE_TOOLS.create, { topic, prompt: brief, content: brief });
+  const raw = await callTool(session, DOKIE_TOOLS.create, { topic, context: brief });
   const status = classifyStatus(raw);
   return {
     status: status === "pending" ? "pending" : status,
@@ -199,12 +198,7 @@ export async function replyPpt(
   projectId: string,
   answer: string,
 ): Promise<StatusResult> {
-  const raw = await callTool(session, DOKIE_TOOLS.reply, {
-    project_id: projectId,
-    projectId,
-    message: answer,
-    reply: answer,
-  });
+  const raw = await callTool(session, DOKIE_TOOLS.reply, { projectId, message: answer });
   const status = classifyStatus(raw);
   return {
     status,
@@ -219,10 +213,7 @@ export async function getStatus(
   session: DokieSession,
   projectId: string,
 ): Promise<StatusResult> {
-  const raw = await callTool(session, DOKIE_TOOLS.status, {
-    project_id: projectId,
-    projectId,
-  });
+  const raw = await callTool(session, DOKIE_TOOLS.status, { projectId });
   const status = classifyStatus(raw);
   return {
     status,
