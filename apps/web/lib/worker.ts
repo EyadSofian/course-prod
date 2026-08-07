@@ -34,14 +34,14 @@ function config(): { baseUrl: string; serviceKey: string } {
 
   const baseUrl = raw.trim().replace(/\/$/, "");
 
-  // Three distinct faults, each with its own fix. Reporting them as one
-  // "invalid URL" sent the reader after the wrong thing once already: the
-  // value was `http://:3001`, the protocol was fine, and the actual problem
-  // was an unresolved Railway reference leaving the host empty.
-  let parsed: URL;
-  try {
-    parsed = new URL(baseUrl);
-  } catch {
+  // Three distinct faults, each with its own fix — but `new URL()` throws
+  // (rather than parsing to an empty `.hostname`) on a special scheme like
+  // http(s) with no host, per the WHATWG standard. So the empty-host case
+  // (an unresolved Railway reference, e.g. `http://:3001`) has to be caught
+  // by inspecting the raw string *before* it ever reaches `new URL()` —
+  // checking `.hostname` after the fact never runs, it always throws first.
+  const schemeMatch = baseUrl.match(/^([a-zA-Z][a-zA-Z\d+.-]*):\/\//);
+  if (!schemeMatch) {
     throw new WorkerError(
       `WORKER_URL غير صالح: «${baseUrl}» — ينقصه البروتوكول على الأرجح. ` +
         `المتوقّع http://<host>:3001`,
@@ -49,12 +49,24 @@ function config(): { baseUrl: string; serviceKey: string } {
     );
   }
 
-  if (!parsed.hostname) {
+  const authority = baseUrl.slice(schemeMatch[0].length).split(/[/?#]/, 1)[0] ?? "";
+  const host = authority.replace(/^[^@]*@/, "").replace(/:\d*$/, "");
+  if (!host) {
     throw new WorkerError(
       `WORKER_URL بلا مضيف: «${baseUrl}». ` +
         `غالباً مرجع ‎\${{…}}‎ لم يُحَل — تأكّد أن اسم الخدمة في المرجع مطابق ` +
         `لاسمها في Railway، أو انسخ الدومين الخاص مباشرة من ` +
         `worker ← Settings → Networking → Private Networking.`,
+      0,
+    );
+  }
+
+  let parsed: URL;
+  try {
+    parsed = new URL(baseUrl);
+  } catch {
+    throw new WorkerError(
+      `WORKER_URL غير صالح: «${baseUrl}» — تأكّد من الصياغة. المتوقّع http://<host>:3001`,
       0,
     );
   }
