@@ -32,10 +32,12 @@ function config(): { baseUrl: string; serviceKey: string } {
   }
   if (!serviceKey) throw new WorkerError("SERVICE_KEY غير مضبوط على خدمة web.", 0);
 
-  // A protocol-relative value like `//host:3001` is valid in a browser and
-  // rejected by Node's fetch, which then fails with a message that says
-  // nothing about the missing scheme. Catch it here where the fix is obvious.
   const baseUrl = raw.trim().replace(/\/$/, "");
+
+  // Three distinct faults, each with its own fix. Reporting them as one
+  // "invalid URL" sent the reader after the wrong thing once already: the
+  // value was `http://:3001`, the protocol was fine, and the actual problem
+  // was an unresolved Railway reference leaving the host empty.
   let parsed: URL;
   try {
     parsed = new URL(baseUrl);
@@ -46,6 +48,17 @@ function config(): { baseUrl: string; serviceKey: string } {
       0,
     );
   }
+
+  if (!parsed.hostname) {
+    throw new WorkerError(
+      `WORKER_URL بلا مضيف: «${baseUrl}». ` +
+        `غالباً مرجع ‎\${{…}}‎ لم يُحَل — تأكّد أن اسم الخدمة في المرجع مطابق ` +
+        `لاسمها في Railway، أو انسخ الدومين الخاص مباشرة من ` +
+        `worker ← Settings → Networking → Private Networking.`,
+      0,
+    );
+  }
+
   if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
     throw new WorkerError(
       `WORKER_URL يستخدم بروتوكولاً غير مدعوم (${parsed.protocol}). المتوقّع http أو https.`,
