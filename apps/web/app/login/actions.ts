@@ -1,6 +1,6 @@
 "use server";
 
-import { eq } from "drizzle-orm";
+import { sql } from "drizzle-orm";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { getDb, users } from "@course-prod/core/db";
@@ -46,7 +46,13 @@ export async function login(_prev: LoginState, formData: FormData): Promise<Logi
   }
 
   const db = getDb();
-  const [user] = await db.select().from(users).where(eq(users.email, email)).limit(1);
+  // Matched on lower(email) so this hits the users_email_unique expression
+  // index and still finds an account whose row was inserted with mixed case.
+  const [user] = await db
+    .select()
+    .from(users)
+    .where(sql`lower(${users.email}) = ${email}`)
+    .limit(1);
 
   // Always run a real verify, even with no matching user, so response time does
   // not reveal whether the address exists. The decoy must be a genuine argon2

@@ -35,6 +35,11 @@ DATABASE_URL=${{Postgres.DATABASE_URL}}
 
 `pg-boss` creates its own schema on first boot (§2) — no separate queue service.
 
+**Postgres 15 or newer is required.** The `assets` table uses a
+`UNIQUE NULLS NOT DISTINCT` constraint so that re-exporting a deck replaces its
+row instead of appending a duplicate; on Postgres 14 and below that syntax does
+not exist and the migration fails. Railway's PostgreSQL template is 16.
+
 ---
 
 ## 2. Volume

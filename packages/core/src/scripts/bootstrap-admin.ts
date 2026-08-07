@@ -42,7 +42,13 @@ async function main() {
   const db = getDb();
   const passwordHash = await hashPassword(password);
 
-  const [existing] = await db.select().from(users).where(eq(users.email, email)).limit(1);
+  // lower(email) to match the expression index, so re-running against an
+  // account created with different casing updates it instead of colliding.
+  const [existing] = await db
+    .select()
+    .from(users)
+    .where(sql`lower(${users.email}) = ${email}`)
+    .limit(1);
 
   if (existing) {
     await db.update(users).set({ passwordHash, role: "admin" }).where(eq(users.id, existing.id));

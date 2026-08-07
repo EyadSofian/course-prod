@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import {
   bigint,
   index,
@@ -7,6 +8,7 @@ import {
   pgTable,
   text,
   timestamp,
+  unique,
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
@@ -48,9 +50,11 @@ export const users = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => ({
-    // Case-insensitive uniqueness: logins are typed by hand and "Eyad@" and
-    // "eyad@" must not become two accounts.
-    emailIdx: uniqueIndex("users_email_lower_idx").on(t.email),
+    // Indexed on lower(email), not email: logins are typed by hand and
+    // "Eyad@" must not become a second account alongside "eyad@". The app
+    // normalises on both write paths, but the constraint should hold even if
+    // a row is inserted directly.
+    emailIdx: uniqueIndex("users_email_unique").on(sql`lower(${t.email})`),
   }),
 );
 
@@ -146,8 +150,16 @@ export const assets = pgTable(
   (t) => ({
     lessonKindIdx: index("assets_lesson_kind_idx").on(t.lessonId, t.kind),
     // Re-generating one slide replaces exactly one row (§6.6) instead of
-    // appending a duplicate that the assembler would then have to disambiguate.
-    uniquePerSlide: uniqueIndex("assets_lesson_kind_slide_idx").on(t.lessonId, t.kind, t.slideId),
+    // appending a duplicate the assembler would have to disambiguate.
+    //
+    // nullsNotDistinct is load-bearing: slide_id is NULL for every whole-lesson
+    // asset (deck_pptx, lesson_mp4, package_zip …), and Postgres's default
+    // treats each NULL as distinct — so without it this constraint silently
+    // permits exactly the duplicates it exists to prevent, for the majority of
+    // asset kinds. Requires Postgres 15+.
+    uniquePerSlide: unique("assets_lesson_kind_slide_uq")
+      .on(t.lessonId, t.kind, t.slideId)
+      .nullsNotDistinct(),
   }),
 );
 

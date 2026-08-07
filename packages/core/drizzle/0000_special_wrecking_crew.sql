@@ -12,7 +12,8 @@ CREATE TABLE IF NOT EXISTS "assets" (
 	"slide_id" text,
 	"storage_key" text NOT NULL,
 	"bytes" bigint DEFAULT 0 NOT NULL,
-	"created_at" timestamp with time zone DEFAULT now() NOT NULL
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	CONSTRAINT "assets_lesson_kind_slide_uq" UNIQUE NULLS NOT DISTINCT("lesson_id","kind","slide_id")
 );
 --> statement-breakpoint
 CREATE TABLE IF NOT EXISTS "courses" (
@@ -155,7 +156,6 @@ EXCEPTION
 END $$;
 --> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "assets_lesson_kind_idx" ON "assets" USING btree ("lesson_id","kind");--> statement-breakpoint
-CREATE UNIQUE INDEX IF NOT EXISTS "assets_lesson_kind_slide_idx" ON "assets" USING btree ("lesson_id","kind","slide_id");--> statement-breakpoint
 CREATE UNIQUE INDEX IF NOT EXISTS "courses_code_idx" ON "courses" USING btree ("code");--> statement-breakpoint
 CREATE UNIQUE INDEX IF NOT EXISTS "lesson_versions_lesson_version_idx" ON "lesson_versions" USING btree ("lesson_id","version");--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "lessons_course_idx" ON "lessons" USING btree ("course_id","order_index");--> statement-breakpoint
@@ -163,4 +163,4 @@ CREATE INDEX IF NOT EXISTS "lessons_status_idx" ON "lessons" USING btree ("statu
 CREATE UNIQUE INDEX IF NOT EXISTS "pronunciations_term_scope_idx" ON "pronunciations" USING btree ("term","scope","course_id");--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "stage_runs_lesson_idx" ON "stage_runs" USING btree ("lesson_id","started_at");--> statement-breakpoint
 CREATE UNIQUE INDEX IF NOT EXISTS "stage_runs_lesson_stage_attempt_idx" ON "stage_runs" USING btree ("lesson_id","stage","attempt");--> statement-breakpoint
-CREATE UNIQUE INDEX IF NOT EXISTS "users_email_lower_idx" ON "users" USING btree ("email");
+CREATE UNIQUE INDEX IF NOT EXISTS "users_email_unique" ON "users" USING btree (lower("email"));
