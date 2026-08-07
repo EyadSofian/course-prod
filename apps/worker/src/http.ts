@@ -5,7 +5,7 @@ import { eq } from "drizzle-orm";
 import { getWorkerEnv, safeEqual } from "@course-prod/core";
 import { getDb, lessons } from "@course-prod/core/db";
 import { createLogger } from "@course-prod/core/logger";
-import { enqueueStage } from "@course-prod/core/queue";
+import { enqueueStage, nextAttempt } from "@course-prod/core/queue";
 import { STAGES, type Stage } from "@course-prod/core/stages";
 import { lessonKey } from "@course-prod/core/storage";
 import { listVoices } from "@course-prod/core/providers/voices";
@@ -156,10 +156,15 @@ async function enqueue(req: IncomingMessage, res: ServerResponse): Promise<void>
     return json(res, 400, { error: "lessonId and a valid stage are required" });
   }
 
+  // A manual trigger has no running job to take an attempt number from, and
+  // attempt 1 collides with stage_runs' unique index the moment this stage has
+  // run before — the insert is dropped as a duplicate and the click does
+  // nothing, visibly. Ask the table what comes next instead.
+  const stage = body.stage as Stage;
   const id = await enqueueStage({
     lessonId: body.lessonId,
-    stage: body.stage as Stage,
-    attempt: 1,
+    stage,
+    attempt: await nextAttempt(body.lessonId, stage),
     force: body.force ?? false,
     requestedBy: body.requestedBy,
   });
@@ -221,11 +226,14 @@ async function dokieReply(req: IncomingMessage, res: ServerResponse): Promise<vo
   }
 
   await answerDeckQuestion(body.lessonId, body.answer);
-  // Answering resumes generation, so the stage is re-queued to pick it up.
+  // Answering resumes generation, so DECK is re-queued to pick it up — on a
+  // fresh attempt number, because attempt 1 already belongs to the run that
+  // paused for this question. That collision is why an answered outline
+  // previously went nowhere: Dokie generated, and nothing here noticed.
   await enqueueStage({
     lessonId: body.lessonId,
     stage: "DECK",
-    attempt: 1,
+    attempt: await nextAttempt(body.lessonId, "DECK"),
     force: true,
   });
   return json(res, 202, { ok: true });

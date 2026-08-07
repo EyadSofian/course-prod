@@ -1,5 +1,8 @@
 import PgBoss from "pg-boss";
+import { and, eq, sql } from "drizzle-orm";
 import { z } from "zod";
+import { getDb } from "../db/client.js";
+import { stageRuns } from "../db/schema.js";
 import { createLogger } from "../logger.js";
 import { MAX_ATTEMPTS, STAGES, jobKey, type Stage } from "../stages.js";
 
@@ -81,6 +84,31 @@ export async function enqueueStage(job: StageJob): Promise<string | null> {
     job_id: id ?? undefined,
   });
   return id;
+}
+
+/**
+ * The next attempt number for (lessonId, stage) — one past whatever is
+ * already recorded, or 1 if the stage has never run.
+ *
+ * A failure retry already has its own attempt number to increment from
+ * (runStage, on the job it is retrying). A manual trigger — a button click
+ * via /enqueue, or a Dokie reply resuming a paused DECK via /dokie/reply —
+ * does not: it starts from an HTTP request, not a running job. Hardcoding
+ * attempt 1 there collides with stage_runs' (lesson, stage, attempt) unique
+ * index the moment that stage has ever run before, and the insert is dropped
+ * as a duplicate — silently, since the guard cannot distinguish "this really
+ * is a redelivery" from "this is attempt 1 again for an unrelated reason".
+ * That is exactly how a Dokie outline-confirmation reply went nowhere: it
+ * reached Dokie and generation finished there, but the resulting re-enqueue
+ * never ran because attempt 1 already belonged to the paused run.
+ */
+export async function nextAttempt(lessonId: string, stage: Stage): Promise<number> {
+  const db = getDb();
+  const [row] = await db
+    .select({ max: sql<number>`coalesce(max(${stageRuns.attempt}), 0)::int` })
+    .from(stageRuns)
+    .where(and(eq(stageRuns.lessonId, lessonId), eq(stageRuns.stage, stage)));
+  return (row?.max ?? 0) + 1;
 }
 
 export type StageHandler = (job: StageJob) => Promise<void>;
