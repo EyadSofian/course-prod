@@ -1,0 +1,34 @@
+# Both Dockerfiles copy the installed node_modules from the deps stage and then
+# `COPY . .` over the top. Without this file, a build run from a developer
+# machine would overwrite the image's linux dependencies with the host's — on
+# an arm64 Mac that means native binaries that cannot load, failing at runtime
+# with an error that says nothing about where it came from.
+#
+# Railway builds from the git repo, where node_modules is already absent, so
+# this mainly protects local builds and keeps the context small either way.
+node_modules
+**/node_modules
+
+# Build output — regenerated inside the image.
+.next
+**/.next
+dist
+**/dist
+*.tsbuildinfo
+
+# Never ship secrets or local state into an image layer.
+.env
+.env.*
+!.env.example
+/data
+data
+shots
+dokie-state.json
+
+.git
+.github
+*.log
+.DS_Store
+.idea
+.vscode
+coverage
