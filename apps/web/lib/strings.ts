@@ -1,4 +1,4 @@
-import type { LessonStatus } from "@course-prod/core";
+import type { LessonStatus } from "@course-prod/core/stages";
 
 /**
  * Every user-facing string lives here, mirroring docs/ux-copy.ar.md. One term

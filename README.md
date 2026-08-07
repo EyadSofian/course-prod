@@ -23,16 +23,33 @@ Queue is `pg-boss` on the same Postgres — no Redis. Storage sits behind an
 
 | M | Deliverable | State |
 |---|---|---|
-| 1 | Repo, Docker, Railway, auth, DB, `/health` | code complete, **unverified** |
+| 1 | Repo, Docker, Railway, auth, DB, `/health` | builds, tests pass, **not yet deployed** |
 | 2 | Ingest + Summarize + review editor | not started |
 | 3 | Dokie MCP integration | not started |
 | 4 | Export + PDF/PNG | not started |
 | 5 | Narration + dictionary | not started |
 | 6 | Assemble + publish + costs | not started |
 
-**M1 has never been compiled or run.** It was written on a machine without
-Node, pnpm, Docker or Postgres. Expect to fix import paths and dependency
-versions on the first `pnpm install && pnpm build`. See `docs/DEPLOY.md` §8.
+### What M1 has actually been verified to do
+
+- `pnpm typecheck`, `pnpm build` and `pnpm test` pass (8 tests covering the §4
+  invariant, §10 redaction and session/URL signing, §6.2 fence stripping, and
+  §6.3 slide reordering).
+- The **standalone** web build boots and serves: `/login` renders RTL Arabic,
+  an unauthenticated `/` 307s to `/login?next=/`, a forged signed URL is
+  rejected 403, and `/api/health` returns 503 `degraded` with the real
+  connection error when Postgres is absent.
+- The worker creates its `/data` subdirectories, fails fast with a structured
+  JSON error when Postgres is unreachable, and exits non-zero.
+
+### What is still unverified
+
+- **Neither Docker image has been built** — no Docker on the machine this was
+  written on.
+- **Nothing has run against a real Postgres.** Migrations are generated
+  (`packages/core/drizzle/0000_*.sql`, 8 tables) but have never been applied,
+  so `bootstrap:admin` and an end-to-end login are untested.
+- The M1 acceptance gate — *log in on the Railway URL* — has not been met.
 
 ## Quick start
 

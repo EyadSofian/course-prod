@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { Readable } from "node:stream";
-import { createLogger, createObjectStore, verifySignedKey } from "@course-prod/core";
+import { createLogger } from "@course-prod/core/logger";
+import { createObjectStore, verifySignedKey } from "@course-prod/core/storage";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";

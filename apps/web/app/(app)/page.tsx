@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { desc } from "drizzle-orm";
-import { formatUsd, getDb, lessons as lessonsTable, type Lesson } from "@course-prod/core";
+import { getDb, lessons as lessonsTable, type Lesson } from "@course-prod/core/db";
+import { formatUsd } from "@course-prod/core/settings";
 import { COLUMNS, board, relativeTime, statusLabel, lessons as pluralLessons } from "@/lib/strings";
 
 export const dynamic = "force-dynamic";

@@ -1,38 +1,12 @@
-import { hash, verify } from "@node-rs/argon2";
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { z } from "zod";
+import { SESSION_COOKIE, SESSION_TTL_SECONDS } from "./constants.js";
 
 /**
- * Email + password with argon2id, sessions in signed httpOnly cookies (§10).
- * No public signup — accounts are created by an admin or the bootstrap script.
+ * Signed session cookies (§10). node:crypto only — deliberately no argon2, so
+ * importing this does not drag a native binary into a bundle that cannot load
+ * one. Password hashing lives in ./password.ts.
  */
-
-// OWASP-recommended argon2id floor; comfortably fast on Railway's shared CPU.
-const ARGON_OPTS = {
-  memoryCost: 19_456, // 19 MiB
-  timeCost: 2,
-  parallelism: 1,
-} as const;
-
-export async function hashPassword(plain: string): Promise<string> {
-  if (plain.length < 12) throw new Error("Password must be at least 12 characters");
-  return hash(plain, ARGON_OPTS);
-}
-
-export async function verifyPassword(hashed: string, plain: string): Promise<boolean> {
-  try {
-    return await verify(hashed, plain);
-  } catch {
-    // A malformed hash must read as "wrong password", never as a crash that
-    // distinguishes this account from any other.
-    return false;
-  }
-}
-
-/* ── sessions ──────────────────────────────────────────────────────────── */
-
-export const SESSION_COOKIE = "cp_session";
-export const SESSION_TTL_SECONDS = 12 * 60 * 60;
 
 export const sessionPayloadSchema = z.object({
   uid: z.string().uuid(),
@@ -94,9 +68,9 @@ export function generateSecret(bytes = 32): string {
 }
 
 /**
- * Constant-time-ish comparison for the worker's SERVICE_KEY header (§10).
- * The worker's HTTP surface is not publicly routed, but a shared secret still
- * needs comparing without leaking length via early return.
+ * Constant-time comparison for the worker's SERVICE_KEY header (§10). The
+ * worker is not publicly routed, but a shared secret still needs comparing
+ * without leaking length through an early return.
  */
 export function safeEqual(a: string, b: string): boolean {
   const bufA = Buffer.from(a);
@@ -104,3 +78,5 @@ export function safeEqual(a: string, b: string): boolean {
   if (bufA.length !== bufB.length) return false;
   return timingSafeEqual(bufA, bufB);
 }
+
+export { SESSION_COOKIE, SESSION_TTL_SECONDS };

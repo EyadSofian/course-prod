@@ -1,5 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { SESSION_COOKIE } from "@course-prod/core";
+// Narrow subpath: the barrel reaches argon2 and pg, neither of which loads on
+// the edge runtime this file executes in.
+import { SESSION_COOKIE } from "@course-prod/core/constants";
 
 /**
  * Coarse gate only. The middleware runs on the edge runtime where the HMAC

@@ -8,7 +8,8 @@
   },
   "scripts": {
     "build": "pnpm -r build",
-    "dev": "pnpm -r --parallel dev",
+    "dev": "pnpm --filter @course-prod/core build && pnpm -r --parallel dev",
+    "test": "pnpm -r test",
     "typecheck": "pnpm -r typecheck",
     "lint": "pnpm -r lint",
     "db:generate": "pnpm --filter @course-prod/core db:generate",

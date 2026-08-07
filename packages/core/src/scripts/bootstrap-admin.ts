@@ -1,5 +1,5 @@
 import { eq, sql } from "drizzle-orm";
-import { hashPassword } from "../auth.js";
+import { hashPassword } from "../password.js";
 import { closeDb, getDb } from "../db/client.js";
 import { pronunciations, users } from "../db/schema.js";
 import { createLogger } from "../logger.js";
@@ -67,10 +67,8 @@ async function main() {
   log.info("pronunciation dictionary seeded", { added: seeded, total: SEED_PRONUNCIATIONS.length });
 
   // Sanity check that the enum/migration state matches what the code expects.
-  const [{ count }] = await db
-    .select({ count: sql<number>`count(*)::int` })
-    .from(users);
-  log.info("bootstrap complete", { users: count });
+  const rows = await db.select({ count: sql<number>`count(*)::int` }).from(users);
+  log.info("bootstrap complete", { users: rows[0]?.count ?? 0 });
 
   await closeDb();
 }

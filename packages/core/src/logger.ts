@@ -17,7 +17,10 @@ function redact(value: unknown, depth = 0): unknown {
   if (value === null || typeof value !== "object") return value;
   if (Array.isArray(value)) return value.map((v) => redact(v, depth + 1));
   if (value instanceof Error) {
-    return { name: value.name, message: value.message, stack: value.stack };
+    // describeError, not .message: an AggregateError's own message is empty
+    // and the useful ECONNREFUSED sits in .errors, so a raw .message logs a
+    // connection failure as a blank string.
+    return { name: value.name, message: describeError(value), stack: value.stack };
   }
 
   const out: Record<string, unknown> = {};
@@ -25,6 +28,39 @@ function redact(value: unknown, depth = 0): unknown {
     out[k] = SECRET_KEY_PATTERN.test(k) ? REDACTED : redact(v, depth + 1);
   }
   return out;
+}
+
+/**
+ * Turns an unknown thrown value into something a human can act on.
+ *
+ * Node's happy-eyeballs connect failures arrive as an AggregateError whose own
+ * `.message` is the empty string, with the real cause (ECONNREFUSED and
+ * friends) buried in `.errors`. Reading `.message` alone therefore reports a
+ * dead database as a blank string — which is exactly the case /health exists
+ * to explain.
+ */
+export function describeError(err: unknown): string {
+  if (err == null) return "unknown error";
+
+  if (err instanceof AggregateError) {
+    const inner = err.errors.map(describeError).filter(Boolean);
+    const unique = [...new Set(inner)];
+    if (unique.length) return `${err.message || "AggregateError"}: ${unique.join("; ")}`;
+  }
+
+  if (err instanceof Error) {
+    const code = (err as NodeJS.ErrnoException).code;
+    const parts = [err.message || err.name, code && !err.message?.includes(code) ? `(${code})` : ""];
+    const joined = parts.filter(Boolean).join(" ").trim();
+    if (joined) return joined;
+  }
+
+  if (typeof err === "object") {
+    const code = (err as { code?: string }).code;
+    if (code) return String(code);
+  }
+
+  return String(err);
 }
 
 export type LogLevel = "debug" | "info" | "warn" | "error";
@@ -45,25 +81,48 @@ export interface Logger {
   child(ctx: LogContext): Logger;
 }
 
-function emit(service: string, base: LogContext, level: LogLevel, msg: string, ctx?: LogContext) {
-  const line = {
-    ts: new Date().toISOString(),
+/**
+ * Where lines go. Injectable so tests can assert on redaction without
+ * monkeypatching process.stdout — which is the same channel `node --test`
+ * writes TAP to, and hijacking it corrupts the run.
+ */
+export type LogSink = (level: LogLevel, line: string) => void;
+
+const defaultSink: LogSink = (level, line) => {
+  if (level === "error") process.stderr.write(line + "\n");
+  else process.stdout.write(line + "\n");
+};
+
+function emit(
+  service: string,
+  base: LogContext,
+  sink: LogSink,
+  level: LogLevel,
+  msg: string,
+  ctx?: LogContext,
+) {
+  sink(
     level,
-    service,
-    msg,
-    ...(redact({ ...base, ...ctx }) as Record<string, unknown>),
-  };
-  const serialised = JSON.stringify(line);
-  if (level === "error") process.stderr.write(serialised + "\n");
-  else process.stdout.write(serialised + "\n");
+    JSON.stringify({
+      ts: new Date().toISOString(),
+      level,
+      service,
+      msg,
+      ...(redact({ ...base, ...ctx }) as Record<string, unknown>),
+    }),
+  );
 }
 
-export function createLogger(service: string, base: LogContext = {}): Logger {
+export function createLogger(
+  service: string,
+  base: LogContext = {},
+  sink: LogSink = defaultSink,
+): Logger {
   return {
-    debug: (m, c) => emit(service, base, "debug", m, c),
-    info: (m, c) => emit(service, base, "info", m, c),
-    warn: (m, c) => emit(service, base, "warn", m, c),
-    error: (m, c) => emit(service, base, "error", m, c),
-    child: (ctx) => createLogger(service, { ...base, ...ctx }),
+    debug: (m, c) => emit(service, base, sink, "debug", m, c),
+    info: (m, c) => emit(service, base, sink, "info", m, c),
+    warn: (m, c) => emit(service, base, sink, "warn", m, c),
+    error: (m, c) => emit(service, base, sink, "error", m, c),
+    child: (ctx) => createLogger(service, { ...base, ...ctx }, sink),
   };
 }

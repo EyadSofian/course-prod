@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { pingDb } from "@course-prod/core";
+import { pingDb } from "@course-prod/core/db";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";

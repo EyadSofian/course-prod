@@ -6,7 +6,7 @@ import {
   sessionCookieOptions,
   verifySessionToken,
   type SessionPayload,
-} from "@course-prod/core";
+} from "@course-prod/core/session";
 
 function secret(): string {
   const s = process.env.SESSION_SECRET;

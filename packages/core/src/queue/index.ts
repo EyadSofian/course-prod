@@ -34,7 +34,11 @@ export async function getBoss(connectionString?: string): Promise<PgBoss> {
   if (!cs) throw new Error("DATABASE_URL is not set");
 
   boss = new PgBoss({
-    connectionString,
+    // `cs`, not `connectionString`: callers such as queueDepth() and
+    // workStage() invoke getBoss() with no argument, which would otherwise
+    // hand pg-boss an undefined connection string and fail with a far less
+    // obvious error than the explicit check above.
+    connectionString: cs,
     // Keep the boss pool small — the app pool is separate and Railway's
     // Postgres connection ceiling is not generous.
     max: 5,

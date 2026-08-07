@@ -1,5 +1,7 @@
 import { statfs } from "node:fs/promises";
-import { pingDb, queueDepth } from "@course-prod/core";
+import { pingDb } from "@course-prod/core/db";
+import { describeError } from "@course-prod/core/logger";
+import { queueDepth } from "@course-prod/core/queue";
 
 /**
  * §9: /health reports DB, queue depth, Dokie session validity and disk free.
@@ -31,7 +33,7 @@ export async function buildHealthReport(stateDir: string): Promise<HealthReport>
     pingDb(),
     queueDepth()
       .then((depth) => ({ ok: true, depth }))
-      .catch((e: Error) => ({ ok: false, error: e.message })),
+      .catch((e: unknown) => ({ ok: false, error: describeError(e) })),
     checkDisk(stateDir),
   ]);
 
@@ -68,6 +70,6 @@ async function checkDisk(path: string) {
       percent_used: percentUsed,
     };
   } catch (e) {
-    return { ok: false, error: (e as Error).message };
+    return { ok: false, error: describeError(e) };
   }
 }

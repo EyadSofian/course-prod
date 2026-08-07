@@ -26,8 +26,11 @@ WORKDIR /app
 # ── deps ──────────────────────────────────────────────────────────────────
 FROM base AS deps
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+# See the web Dockerfile: --frozen-lockfile needs every declared workspace
+# member's manifest present, not just this service's.
 COPY packages/core/package.json ./packages/core/
 COPY apps/worker/package.json ./apps/worker/
+COPY apps/web/package.json ./apps/web/
 RUN pnpm install --frozen-lockfile --filter @course-prod/worker... --prod=false
 
 # ── build ─────────────────────────────────────────────────────────────────
@@ -36,7 +39,7 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY --from=deps /app/packages/core/node_modules ./packages/core/node_modules
 COPY --from=deps /app/apps/worker/node_modules ./apps/worker/node_modules
 COPY . .
-RUN pnpm --filter @course-prod/worker build
+RUN pnpm --filter @course-prod/worker... build
 
 # ── runtime ───────────────────────────────────────────────────────────────
 FROM base AS runner

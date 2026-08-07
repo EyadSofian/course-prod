@@ -11,8 +11,12 @@ WORKDIR /app
 # ── deps ──────────────────────────────────────────────────────────────────
 FROM base AS deps
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+# Every workspace member's manifest, including the worker's: pnpm-workspace.yaml
+# declares apps/*, and --frozen-lockfile rejects the install if a declared
+# member is missing from the tree.
 COPY packages/core/package.json ./packages/core/
 COPY apps/web/package.json ./apps/web/
+COPY apps/worker/package.json ./apps/worker/
 RUN pnpm install --frozen-lockfile --filter @course-prod/web... --prod=false
 
 # ── build ─────────────────────────────────────────────────────────────────
@@ -22,7 +26,9 @@ COPY --from=deps /app/packages/core/node_modules ./packages/core/node_modules
 COPY --from=deps /app/apps/web/node_modules ./apps/web/node_modules
 COPY . .
 ENV NEXT_TELEMETRY_DISABLED=1
-RUN pnpm --filter @course-prod/web build
+# `web...` builds @course-prod/core first — Next consumes its compiled dist,
+# not its TypeScript source.
+RUN pnpm --filter @course-prod/web... build
 
 # ── runtime ───────────────────────────────────────────────────────────────
 FROM node:22-slim AS runner

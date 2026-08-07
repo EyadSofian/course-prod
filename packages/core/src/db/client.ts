@@ -1,5 +1,6 @@
 import { drizzle, type NodePgDatabase } from "drizzle-orm/node-postgres";
 import pg from "pg";
+import { describeError } from "../logger.js";
 import * as schema from "./schema.js";
 
 let pool: pg.Pool | undefined;
@@ -40,7 +41,7 @@ export async function pingDb(): Promise<{ ok: boolean; latencyMs: number; error?
     await getPool().query("select 1");
     return { ok: true, latencyMs: Date.now() - started };
   } catch (e) {
-    return { ok: false, latencyMs: Date.now() - started, error: (e as Error).message };
+    return { ok: false, latencyMs: Date.now() - started, error: describeError(e) };
   }
 }
 

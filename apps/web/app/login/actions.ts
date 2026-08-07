@@ -3,12 +3,24 @@
 import { eq } from "drizzle-orm";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
-import { createLogger, getDb, users, verifyPassword } from "@course-prod/core";
+import { getDb, users } from "@course-prod/core/db";
+import { createLogger } from "@course-prod/core/logger";
+import { hashPassword, verifyPassword } from "@course-prod/core/password";
 import { rateLimit } from "@/lib/rate-limit";
 import { startSession } from "@/lib/session";
 import { auth } from "@/lib/strings";
 
 const log = createLogger("web.auth");
+
+/**
+ * Computed once per process and reused, so an unknown address costs the same
+ * wall-clock time as a known one without paying for a fresh hash each attempt.
+ */
+let decoy: Promise<string> | undefined;
+function decoyHash(): Promise<string> {
+  decoy ??= hashPassword("decoy-password-not-a-credential");
+  return decoy;
+}
 
 export interface LoginState {
   error?: string;
@@ -36,10 +48,10 @@ export async function login(_prev: LoginState, formData: FormData): Promise<Logi
   const db = getDb();
   const [user] = await db.select().from(users).where(eq(users.email, email)).limit(1);
 
-  // Always run a verify, even with no user, so response time does not reveal
-  // whether the address exists.
-  const dummy = "$argon2id$v=19$m=19456,t=2,p=1$c29tZXNhbHQ$3+2wBhdVoAWQ0P0mV0kL0Q";
-  const ok = await verifyPassword(user?.passwordHash ?? dummy, password);
+  // Always run a real verify, even with no matching user, so response time does
+  // not reveal whether the address exists. The decoy must be a genuine argon2
+  // hash: a malformed one would fail fast and reintroduce the timing signal.
+  const ok = await verifyPassword(user?.passwordHash ?? (await decoyHash()), password);
 
   if (!user || !ok) {
     log.warn("login failed", { ip, email });
