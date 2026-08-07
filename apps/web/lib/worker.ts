@@ -26,7 +26,7 @@ function config(): { baseUrl: string; serviceKey: string } {
   if (!raw) {
     throw new WorkerError(
       "WORKER_URL غير مضبوط على خدمة web. اضبطه على " +
-        "http://${{worker.RAILWAY_PRIVATE_DOMAIN}}:3001",
+        "http://${{course-prodworker.RAILWAY_PRIVATE_DOMAIN}}:3001",
       0,
     );
   }

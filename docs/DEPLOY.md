@@ -97,7 +97,7 @@ SERVICE_KEY=<from step 0>
 PUBLIC_URL=https://<your-web-domain>.up.railway.app
 STATE_DIR=/data
 MONTHLY_BUDGET_USD=300
-WORKER_URL=http://${{worker.RAILWAY_PRIVATE_DOMAIN}}:3001
+WORKER_URL=http://${{course-prodworker.RAILWAY_PRIVATE_DOMAIN}}:3001
 ```
 
 `WORKER_URL` points at the worker over Railway's private network. It is
@@ -106,13 +106,17 @@ web container cannot touch `/data` at all. Uploads are posted to the worker and
 downloads are streamed back through it, authenticated with `SERVICE_KEY`.
 
 > **Reference the private domain, do not type it.** The hostname is derived
-> from the service name, not from the word "worker" — a service named
-> `@course-prod/worker` does *not* answer on `worker.railway.internal`, and
-> writing that by hand fails with `getaddrinfo ENOTFOUND`.
+> from the actual Railway service name, which does not have to match the
+> directory it deploys from or the repo it's connected to. In this project the
+> worker service's name is `course-prodworker` (check **Settings → Networking
+> → Private Networking** on the service — it states the resolvable name
+> directly), so the reference is `${{course-prodworker.RAILWAY_PRIVATE_DOMAIN}}`.
+> Typing `worker.railway.internal` by hand fails with `getaddrinfo ENOTFOUND`;
+> a reference to a service name that does not exist fails quieter, resolving
+> to an empty string and producing `WORKER_URL=http://:3001`.
 >
-> `${{worker.RAILWAY_PRIVATE_DOMAIN}}` lets Railway resolve it, the same
-> mechanism as `${{Postgres.DATABASE_URL}}` above. Typing `${{` in the value
-> field opens an autocomplete of services and their variables. Keep the
+> Typing `${{` in the value field opens an autocomplete of services and their
+> variables — use it to confirm the name rather than assuming it. Keep the
 > `:3001` port on the end — the reference supplies only the host.
 >
 > Getting this wrong keeps every other check green — the app loads, login

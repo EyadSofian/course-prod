@@ -28,7 +28,7 @@ const webSchema = z.object({
    * to exactly one service: web cannot read or write /data, so uploads and
    * downloads are proxied through the worker's SERVICE_KEY-protected surface.
    */
-  WORKER_URL: z.string().url().default("http://worker.railway.internal:3001"),
+  WORKER_URL: z.string().url().default("http://course-prodworker.railway.internal:3001"),
 });
 
 const workerSchema = z.object({

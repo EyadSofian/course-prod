@@ -134,7 +134,7 @@ Run the self-test daily and alert on failure (§6.5). Railway cron, or any
 scheduler that can make an authenticated request:
 
 ```bash
-curl -fsS -H "x-service-key: $SERVICE_KEY" http://worker.railway.internal:3001/self-test
+curl -fsS -H "x-service-key: $SERVICE_KEY" http://course-prodworker.railway.internal:3001/self-test
 ```
 
 The route already sends a Telegram alert on failure (`kind: selftest_failed`),
